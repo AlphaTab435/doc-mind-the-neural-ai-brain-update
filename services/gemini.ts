@@ -2,8 +2,9 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GroundingSource } from "../types";
 
+// Switching both to Flash 3 as it supports Search/Grounding with much higher rate limits
 const LITE_MODEL = 'gemini-3-flash-preview';
-const SEARCH_MODEL = 'gemini-3-pro-preview';
+const SEARCH_MODEL = 'gemini-3-flash-preview'; 
 
 /**
  * Creates a fresh AI instance.
@@ -11,22 +12,26 @@ const SEARCH_MODEL = 'gemini-3-pro-preview';
  * Vite replaces this variable at build time.
  */
 const getAI = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = (process as any).env.API_KEY;
   if (!apiKey) {
     throw new Error("API_KEY_MISSING");
   }
   return new GoogleGenAI({ apiKey });
 };
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 4000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 3000): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
-    const isRateLimit = error.message?.includes('429') || error.status === 429 || error.message?.includes('RESOURCE_EXHAUSTED');
+    const errorMsg = error.message || "";
+    const isRateLimit = errorMsg.includes('429') || error.status === 429 || errorMsg.includes('RESOURCE_EXHAUSTED');
+    
     if (retries > 0 && isRateLimit) {
-      const delay = baseDelay + Math.random() * 2000;
+      // Exponential backoff with jitter
+      const delay = baseDelay * (6 - retries) + Math.random() * 2000;
+      console.warn(`Neural link congestion (429). Retrying in ${Math.round(delay)}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, baseDelay * 2);
+      return withRetry(fn, retries - 1, baseDelay);
     }
     throw error;
   }
@@ -69,7 +74,7 @@ export const analyzeGithubRepo = async (url: string) => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Perform architectural scan of GitHub repo: ${url}`,
+      contents: `Perform architectural scan of GitHub repo: ${url}. List core features and tech stack based on README.`,
       config: {
         systemInstruction: "You are a senior repo auditor. Use googleSearch to find the README and project structure. Respond in technical bullet points.",
         tools: [{ googleSearch: {} }],
@@ -88,7 +93,7 @@ export const analyzeYouTubeLink = async (url: string) => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Neural synchronization of YouTube video: ${url}`,
+      contents: `Neural synchronization of YouTube video: ${url}. Provide a high-level summary.`,
       config: {
         systemInstruction: "You are a video intelligence agent. Use googleSearch to identify the video title and core topics.",
         tools: [{ googleSearch: {} }],
@@ -110,11 +115,11 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          { text: "Briefly summarize the main points." }
+          { text: "Briefly summarize the main points in 3-5 bullets." }
         ]
       },
       config: { 
-        systemInstruction: "Document analysis engine. Provide 3 core bullets.",
+        systemInstruction: "Document analysis engine. Provide absolute technical precision.",
         temperature: 0.1
       }
     });
@@ -133,14 +138,15 @@ export async function* askQuestionStream(
     parts: [{ text: msg.content }]
   }));
 
-  const activeModel = (useSearch || content.type !== 'pdf') ? SEARCH_MODEL : LITE_MODEL;
+  // Both models are Flash 3 now to avoid Pro-specific 429s
+  const activeModel = LITE_MODEL;
 
   const parts: any[] = [];
   if (content.type === 'pdf' && content.base64) {
     parts.push({ inlineData: { data: content.base64, mimeType: content.mimeType } });
   }
   
-  const contextPrefix = content.url ? `TARGET: ${content.url}\n` : '';
+  const contextPrefix = content.url ? `CONTEXT TARGET: ${content.url}\n` : '';
   parts.push({ text: `${contextPrefix}INQUIRY: ${question}` });
 
   try {
@@ -149,7 +155,7 @@ export async function* askQuestionStream(
       model: activeModel,
       contents: [...historyContents, { role: 'user', parts }],
       config: {
-        systemInstruction: "You are DOC-MIND. Respond with absolute technical precision.",
+        systemInstruction: "You are DOC-MIND, a neural interface. Respond with absolute technical precision. Use Markdown.",
         temperature: 0.2,
         tools: (useSearch || content.type !== 'pdf') ? [{ googleSearch: {} }] : undefined
       }
@@ -159,11 +165,13 @@ export async function* askQuestionStream(
       if (chunk.text) yield { text: chunk.text, sources: extractSources(chunk) };
     }
   } catch (err: any) {
-    const isRateLimit = err.message?.includes('429') || err.status === 429 || err.message?.includes('RESOURCE_EXHAUSTED');
+    const errorMsg = err.message || "";
+    const isRateLimit = errorMsg.includes('429') || err.status === 429 || errorMsg.includes('RESOURCE_EXHAUSTED');
     if (isRateLimit) {
-      yield { text: "⚠️ QUOTA EXHAUSTED: Please use 'Switch Neural Key' to continue.", sources: [] };
+      yield { text: "⚠️ NEURAL CONGESTION: The system is receiving too many requests. Please try again in 30 seconds or click 'Switch Neural Key' to use your own dedicated project key.", sources: [] };
     } else {
-      yield { text: "Neural link interrupted.", sources: [] };
+      console.error("Stream Error:", err);
+      yield { text: "Neural link interrupted. This can happen if the content is restricted or the session timed out.", sources: [] };
     }
     throw err;
   }

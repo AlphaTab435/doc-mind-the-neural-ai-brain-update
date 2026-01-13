@@ -6,7 +6,7 @@ import { DocumentStats } from './components/DocumentStats';
 import { Message, ContentData, AnalysisStatus, GroundingSource } from './types';
 import { analyzeDocument, analyzeYouTubeLink, analyzeGithubRepo, askQuestionStream } from './services/gemini';
 
-// Define the interface for the AI Studio key manager within the global scope to fix the declaration conflict
+// Define the interface for the AI Studio key manager within the global scope
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
@@ -31,7 +31,8 @@ const App: React.FC = () => {
       if (window.aistudio) {
         await window.aistudio.openSelectKey();
         setHasQuotaError(false);
-        // We proceed immediately assuming the key selection UI handled the user interaction
+        // Prompt immediate reload or just state reset
+        window.location.reload();
       } else {
         window.open('https://ai.google.dev/gemini-api/docs/billing', '_blank');
       }
@@ -51,7 +52,8 @@ const App: React.FC = () => {
       setMessages([{ id: 'init', role: 'assistant', content: `Neural link established. Document context parsed successfully.`, timestamp: Date.now() }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
-      if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+      const msg = error.message || "";
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
       }
       console.error(error);
@@ -69,7 +71,8 @@ const App: React.FC = () => {
       setMessages([{ id: 'init', role: 'assistant', content: `Video context retrieved. High-speed grounding active.`, timestamp: Date.now(), sources: result.sources }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
-      if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+      const msg = error.message || "";
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
       }
     }
@@ -86,7 +89,8 @@ const App: React.FC = () => {
       setMessages([{ id: 'init', role: 'assistant', content: `Repository successfully indexed. Ready for architectural queries.`, timestamp: Date.now(), sources: result.sources }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
-      if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+      const msg = error.message || "";
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
       }
     }
@@ -133,7 +137,8 @@ const App: React.FC = () => {
         });
       }
     } catch (error: any) {
-      if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+      const msg = error.message || "";
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
       }
     } finally {
