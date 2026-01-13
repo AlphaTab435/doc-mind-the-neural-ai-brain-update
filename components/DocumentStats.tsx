@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ContentData } from '../types';
 import { generateSpeech } from '../services/gemini';
@@ -10,7 +9,6 @@ interface ContentStatsProps {
 
 let sharedAudioContext: AudioContext | null = null;
 
-// Manual base64 decoding implementation as per guidelines
 function decode(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -21,7 +19,6 @@ function decode(base64: string) {
   return bytes;
 }
 
-// Manual raw PCM decoding required for Gemini API audio output
 async function decodeAudioData(
   data: Uint8Array,
   ctx: AudioContext,
@@ -59,7 +56,6 @@ export const DocumentStats: React.FC<ContentStatsProps> = ({ content, onSelectQu
 
       const base64Audio = await generateSpeech(content.summary.substring(0, 500));
       const bytes = decode(base64Audio);
-      // Raw PCM bytes decoding as per Gemini documentation
       const buffer = await decodeAudioData(bytes, sharedAudioContext, 24000, 1);
       
       const source = sharedAudioContext.createBufferSource();
@@ -95,35 +91,35 @@ export const DocumentStats: React.FC<ContentStatsProps> = ({ content, onSelectQu
   };
 
   return (
-    <div className="space-y-6">
-      <div className={`glass-panel rounded-2xl overflow-hidden border-l-4 ${colorClasses[content.type].split(' ')[0]}`}>
+    <div className="space-y-4 md:space-y-6">
+      <div className={`glass-panel rounded-xl md:rounded-2xl overflow-hidden border-l-4 ${colorClasses[content.type].split(' ')[0]}`}>
         {thumbnail && (
-          <img src={thumbnail} alt="Video Preview" className="w-full h-32 object-cover opacity-60" />
+          <img src={thumbnail} alt="Video Preview" className="w-full h-24 md:h-32 object-cover opacity-60" />
         )}
-        <div className="p-4 flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colorClasses[content.type].split(' ').slice(1).join(' ')}`}>
-            <i className={`fa-solid ${iconClasses[content.type]} text-2xl`}></i>
+        <div className="p-3 md:p-4 flex items-center gap-3 md:gap-4">
+          <div className={`shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center ${colorClasses[content.type].split(' ').slice(1).join(' ')}`}>
+            <i className={`fa-solid ${iconClasses[content.type]} text-xl md:text-2xl`}></i>
           </div>
           <div className="overflow-hidden">
-            <h3 className="font-bold text-slate-100 truncate text-sm">{content.name}</h3>
-            <p className="text-xs text-slate-400 uppercase tracking-tighter">
+            <h3 className="font-bold text-slate-100 truncate text-xs md:text-sm">{content.name}</h3>
+            <p className="text-[9px] md:text-xs text-slate-400 uppercase tracking-tighter">
               {content.type === 'pdf' ? 'Document Context' : content.type === 'youtube' ? 'Video Sync' : 'Repo Onboarding'}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl p-6 space-y-4 relative">
+      <div className="glass-panel rounded-xl md:rounded-2xl p-4 md:p-6 space-y-4 relative">
         <div className="flex items-center justify-between">
           <div className={`flex items-center gap-2 ${colorClasses[content.type].split(' ').pop()}`}>
-            <i className="fa-solid fa-wand-magic-sparkles"></i>
-            <h4 className="text-xs font-bold uppercase tracking-widest">Brain Summary</h4>
+            <i className="fa-solid fa-wand-magic-sparkles text-[10px] md:text-xs"></i>
+            <h4 className="text-[10px] md:text-xs font-bold uppercase tracking-widest">Summary</h4>
           </div>
           {content.summary && (
             <button 
               onClick={handleSpeak}
               disabled={isSpeaking}
-              className={`text-[10px] flex items-center gap-2 px-2 py-1 rounded-lg border transition-all ${
+              className={`text-[8px] md:text-[10px] flex items-center gap-1.5 md:gap-2 px-2 py-1 rounded-lg border transition-all ${
                 isSpeaking ? 'bg-slate-100 text-slate-900' : 'text-slate-400 border-slate-700 hover:border-slate-500'
               }`}
             >
@@ -133,17 +129,17 @@ export const DocumentStats: React.FC<ContentStatsProps> = ({ content, onSelectQu
           )}
         </div>
         
-        <div className="prose prose-invert prose-sm text-slate-300 max-h-64 overflow-y-auto custom-scrollbar pr-2 whitespace-pre-wrap">
-          <div className="text-sm leading-relaxed">{content.summary || 'Synthesizing context...'}</div>
+        <div className="prose prose-invert prose-sm text-slate-300 max-h-48 md:max-h-64 overflow-y-auto custom-scrollbar pr-1 whitespace-pre-wrap">
+          <div className="text-[12px] md:text-sm leading-relaxed">{content.summary || 'Synthesizing...'}</div>
         </div>
 
-        <div className="pt-4 border-t border-slate-700">
-          <div className="flex flex-wrap gap-2">
+        <div className="pt-3 border-t border-slate-700">
+          <div className="flex flex-nowrap overflow-x-auto gap-1.5 pb-2 custom-scrollbar snap-x no-scrollbar">
             {suggestedQueries.map(q => (
               <button 
                 key={q} 
                 onClick={() => onSelectQuery(q)}
-                className={`px-2 py-1 bg-slate-800/50 border border-slate-700 rounded text-[10px] text-slate-400 transition-all hover:bg-slate-700 hover:text-white`}
+                className={`shrink-0 snap-start px-2 py-1 bg-slate-800/50 border border-slate-700 rounded text-[9px] md:text-[10px] text-slate-400 transition-all hover:bg-slate-700 hover:text-white whitespace-nowrap`}
               >
                 {q}
               </button>

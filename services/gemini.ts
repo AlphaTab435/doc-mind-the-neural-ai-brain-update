@@ -6,29 +6,36 @@ const LITE_MODEL = 'gemini-3-flash-preview';
 const SEARCH_MODEL = 'gemini-3-flash-preview'; 
 
 const getAI = () => {
-  const apiKey = (process as any).env?.API_KEY || (import.meta as any).env?.VITE_API_KEY;
-  if (!apiKey) throw new Error("API_KEY_MISSING");
-  return new GoogleGenAI({ apiKey });
+  if (!process.env.API_KEY) throw new Error("API_KEY_MISSING");
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-/**
- * Robust retry logic for the free tier. 
- * Free tier is 15 RPM. 
- * If a 429 is hit, we wait 15s base to ensure the window clears.
- */
-async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 15000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 2, baseDelay = 5000): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
-    const errorMsg = error.message || "";
-    const isRateLimit = errorMsg.includes('429') || error.status === 429 || errorMsg.includes('RESOURCE_EXHAUSTED');
+    const errorMsg = (error.message || "").toLowerCase();
+    const status = error.status || 0;
+    
+    // Check for Daily Quota (RPD)
+    // The API returns "exceeded your current quota" for daily limits on the free tier.
+    if (status === 429 && (
+      errorMsg.includes('daily') || 
+      errorMsg.includes('day') || 
+      errorMsg.includes('quota exhausted') || 
+      errorMsg.includes('exceeded your current quota')
+    )) {
+      const dailyErr = new Error("DAILY_QUOTA_EXHAUSTED");
+      (dailyErr as any).status = 429;
+      throw dailyErr;
+    }
+
+    // Standard Rate Limit (RPM)
+    const isRateLimit = errorMsg.includes('429') || status === 429;
     
     if (retries > 0 && isRateLimit) {
-      const retryCount = 6 - retries;
-      const delay = baseDelay * retryCount + Math.random() * 2000;
-      console.warn(`[429] Neural link congested. Retrying (${retryCount}/5) in ${Math.round(delay)}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, baseDelay);
+      await new Promise(resolve => setTimeout(resolve, baseDelay));
+      return withRetry(fn, retries - 1, baseDelay * 2);
     }
     throw error;
   }
@@ -40,7 +47,7 @@ const extractSources = (response: any): GroundingSource[] => {
   if (chunks) {
     chunks.forEach((chunk: any) => {
       if (chunk.web) {
-        sources.push({ title: chunk.web.title || 'Verified Source', uri: chunk.web.uri });
+        sources.push({ title: chunk.web.title || 'Source Verified', uri: chunk.web.uri });
       }
     });
   }
@@ -71,12 +78,11 @@ export const analyzeGithubRepo = async (url: string) => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Quick architectural scan: ${url}. List core tech stack and 3 main features.`,
+      contents: `Architectural analysis for: ${url}`,
       config: {
-        systemInstruction: "You are a repository indexer. Provide technical metadata only. NO CONVERSATION.",
+        systemInstruction: "You are a senior systems architect. Provide high-level technical metadata. Use Search grounding only to identify core tech stack.",
         tools: [{ googleSearch: {} }],
-        temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 0 }
+        temperature: 0.1
       }
     });
     return {
@@ -91,12 +97,11 @@ export const analyzeYouTubeLink = async (url: string) => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Summary of video context: ${url}`,
+      contents: `Summarize video context: ${url}`,
       config: {
-        systemInstruction: "You are a video metadata agent. Summarize core topics. NO FILLER.",
+        systemInstruction: "Video analyst. Concise technical summary.",
         tools: [{ googleSearch: {} }],
-        temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 0 }
+        temperature: 0.1
       }
     });
     return {
@@ -114,14 +119,10 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          { text: "Provide a 3-bullet summary of the core message." }
+          { text: "Provide a 3-bullet summary." }
         ]
       },
-      config: { 
-        systemInstruction: "Document analyst. Technical only. No conversational filler. No search tools needed.",
-        temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 0 }
-      }
+      config: { systemInstruction: "Document analyst.", temperature: 0.1 }
     });
     return response.text || "Analysis complete.";
   });
@@ -143,7 +144,7 @@ export async function* askQuestionStream(
     parts.push({ inlineData: { data: content.base64, mimeType: content.mimeType } });
   }
   
-  const contextPrefix = content.url ? `TARGET: ${content.url}\n` : '';
+  const contextPrefix = content.url ? `CONTEXT_URL: ${content.url}\n` : '';
   parts.push({ text: `${contextPrefix}INQUIRY: ${question}` });
 
   try {
@@ -152,9 +153,9 @@ export async function* askQuestionStream(
       model: LITE_MODEL,
       contents: [...historyContents, { role: 'user', parts }],
       config: {
-        systemInstruction: "You are DOC-MIND. Technical precision is required. Use Markdown.",
+        systemInstruction: "You are DOC-MIND. Precise technical markdown.",
         temperature: 0.2,
-        tools: (useSearch || content.type !== 'pdf') ? [{ googleSearch: {} }] : undefined
+        tools: useSearch ? [{ googleSearch: {} }] : undefined
       }
     });
 
@@ -162,12 +163,18 @@ export async function* askQuestionStream(
       if (chunk.text) yield { text: chunk.text, sources: extractSources(chunk) };
     }
   } catch (err: any) {
-    const errorMsg = err.message || "";
-    const isRateLimit = errorMsg.includes('429') || err.status === 429 || errorMsg.includes('RESOURCE_EXHAUSTED');
-    if (isRateLimit) {
-      yield { text: "⚠️ COOLDOWN: Neural link saturated (Gemini RPM Limit). System is backing off to clear the window...", sources: [] };
-    } else {
-      yield { text: "Neural connection interrupted. This often happens due to content safety filters.", sources: [] };
+    const errorMsg = (err.message || "").toLowerCase();
+    
+    if (errorMsg.includes('daily') || errorMsg.includes('day') || errorMsg.includes('quota exhausted') || errorMsg.includes('exceeded your current quota')) {
+       yield { 
+        text: "🛑 **DAILY NEURAL EXHAUSTION**: You have used 100% of your Gemini API daily quota (RPD). \n\n**Next Steps:** \n1. Wait until Midnight Pacific Time for reset.\n2. Or, toggle 'Search Off' to continue chatting without grounding.", 
+        sources: [] 
+      };
+    } else if (err.status === 429) {
+      yield { 
+        text: "⏳ **MINUTE LIMIT REACHED (RPM)**: Your 60-second window is currently full. \n\n**Solution:** \n1. Wait 60 seconds for the buffer to clear.", 
+        sources: [] 
+      };
     }
     throw err;
   }

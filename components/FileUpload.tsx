@@ -1,4 +1,3 @@
-
 import React, { useCallback, useState } from 'react';
 
 interface FileUploadProps {
@@ -42,23 +41,23 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6 animate-in fade-in zoom-in duration-500">
-      <div className="flex p-1 bg-slate-900/80 rounded-2xl border border-slate-700 w-fit mx-auto">
+    <div className="w-full max-w-xl mx-auto space-y-4 md:space-y-6 animate-in fade-in zoom-in duration-500">
+      <div className="flex p-1 bg-slate-900/80 rounded-xl md:rounded-2xl border border-slate-700 w-full sm:w-fit mx-auto overflow-hidden">
         <button 
           onClick={() => { setMode('file'); setInput(''); }}
-          className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'file' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          className={`flex-1 sm:flex-none px-3 py-2 md:px-4 md:py-2 rounded-lg md:rounded-xl text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'file' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
-          Neural PDF
+          PDF
         </button>
         <button 
           onClick={() => { setMode('link'); setInput(''); }}
-          className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'link' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          className={`flex-1 sm:flex-none px-3 py-2 md:px-4 md:py-2 rounded-lg md:rounded-xl text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'link' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
           YouTube
         </button>
         <button 
           onClick={() => { setMode('repo'); setInput(''); }}
-          className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'repo' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          className={`flex-1 sm:flex-none px-3 py-2 md:px-4 md:py-2 rounded-lg md:rounded-xl text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'repo' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
           Repo
         </button>
@@ -72,7 +71,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo
           e.preventDefault(); setIsDragging(false);
           if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
         } : undefined}
-        className={`relative h-64 w-full rounded-3xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center
+        className={`relative h-56 md:h-64 w-full rounded-2xl md:rounded-3xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center
           ${isDragging 
             ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
             : mode === 'file' ? 'border-slate-700 hover:border-emerald-500/50 bg-slate-800/50' 
@@ -84,46 +83,46 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo
         {mode === 'file' ? (
           <>
             <input type="file" accept=".pdf" onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-            <div className="text-center p-6 pointer-events-none">
-              <div className="mb-4 text-slate-400 group-hover:text-emerald-400 transition-colors text-5xl">
+            <div className="text-center p-4 md:p-6 pointer-events-none">
+              <div className="mb-3 md:mb-4 text-slate-400 group-hover:text-emerald-400 transition-colors text-4xl md:text-5xl">
                 <i className="fa-solid fa-file-pdf"></i>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-slate-100">Drop PDF to Analyze</h3>
-              <p className="text-sm text-slate-400">Scan contracts, resumes, or manuals.</p>
+              <h3 className="text-lg md:text-xl font-semibold mb-1 md:mb-2 text-slate-100">Drop PDF</h3>
+              <p className="text-[10px] md:text-sm text-slate-400">Contracts, Resumes, or Manuals.</p>
             </div>
           </>
         ) : (
-          <form onSubmit={handleSubmit} className="w-full px-8 text-center space-y-6">
-            <div className={`${mode === 'link' ? 'text-red-500' : 'text-indigo-400'} text-5xl mb-2`}>
+          <form onSubmit={handleSubmit} className="w-full px-6 md:px-8 text-center space-y-4 md:space-y-6">
+            <div className={`${mode === 'link' ? 'text-red-500' : 'text-indigo-400'} text-4xl md:text-5xl mb-1`}>
               <i className={`fa-solid ${mode === 'link' ? 'fa-brands fa-youtube' : 'fa-brands fa-github'}`}></i>
             </div>
-            <h3 className="text-xl font-semibold text-slate-100">
-              {mode === 'link' ? 'Sync Video Content' : 'Repo Onboarding'}
+            <h3 className="text-lg md:text-xl font-semibold text-slate-100">
+              {mode === 'link' ? 'Video Context' : 'Repo Onboarding'}
             </h3>
             <div className="relative">
               <input 
                 type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={mode === 'link' ? "Paste YouTube Link..." : "GitHub Repository URL..."}
-                className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-5 py-4 text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500/50"
+                placeholder={mode === 'link' ? "YouTube Link..." : "GitHub URL..."}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 text-[13px] md:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500/50"
               />
               <button 
                 type="submit" 
-                className={`absolute right-2 top-2 bottom-2 px-4 text-white rounded-xl text-xs font-bold uppercase transition-colors ${mode === 'link' ? 'bg-red-600 hover:bg-red-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                className={`absolute right-1.5 top-1.5 bottom-1.5 px-3 md:px-4 text-white rounded-lg md:rounded-xl text-[10px] font-bold uppercase transition-colors ${mode === 'link' ? 'bg-red-600 hover:bg-red-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
               >
-                Connect
+                Sync
               </button>
             </div>
-            <p className="text-xs text-slate-500 italic">Neural engine will map content via Deep Search Grounding.</p>
+            <p className="text-[8px] md:text-[10px] text-slate-500 italic">Neural engine will map content via Deep Search.</p>
           </form>
         )}
 
         {isLoading && (
-          <div className="absolute inset-0 bg-slate-900/60 rounded-3xl flex items-center justify-center backdrop-blur-sm z-10">
+          <div className="absolute inset-0 bg-slate-900/60 rounded-2xl md:rounded-3xl flex items-center justify-center backdrop-blur-sm z-10">
             <div className="flex flex-col items-center">
-              <div className={`w-10 h-10 border-4 border-slate-700 border-t-white rounded-full animate-spin`}></div>
-              <span className="mt-4 font-medium animate-pulse text-slate-100 text-sm">{loadingMessage || 'Mapping Context...'}</span>
+              <div className={`w-8 h-8 border-3 border-slate-700 border-t-white rounded-full animate-spin`}></div>
+              <span className="mt-4 font-medium animate-pulse text-slate-100 text-[10px] md:text-sm px-4 text-center">{loadingMessage || 'Mapping Context...'}</span>
             </div>
           </div>
         )}

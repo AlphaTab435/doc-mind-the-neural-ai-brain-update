@@ -1,20 +1,10 @@
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Chat } from './components/Chat';
 import { DocumentStats } from './components/DocumentStats';
 import { Message, ContentData, AnalysisStatus, GroundingSource } from './types';
 import { analyzeDocument, analyzeYouTubeLink, analyzeGithubRepo, askQuestionStream } from './services/gemini';
-
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-  interface Window {
-    aistudio?: AIStudio;
-  }
-}
 
 const App: React.FC = () => {
   const [currentContent, setCurrentContent] = useState<ContentData | null>(null);
@@ -23,103 +13,84 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
-  const [hasQuotaError, setHasQuotaError] = useState(false);
+  const [quotaCooldown, setQuotaCooldown] = useState(0);
+  const [isDailyLocked, setIsDailyLocked] = useState(false);
+  const [showSummaryMobile, setShowSummaryMobile] = useState(false);
   
-  // Ref-based history allows handleSendMessage to be stable (no dependency changes)
   const conversationHistory = useRef<{role: string, content: string}[]>([]);
-  const analysisLock = useRef<string | null>(null);
+  const isExecutingAnalysis = useRef<boolean>(false);
 
-  const handleSwitchKey = async () => {
-    try {
-      if (window.aistudio) {
-        await window.aistudio.openSelectKey();
-        setHasQuotaError(false);
-        window.location.reload();
-      } else {
-        window.open('https://ai.google.dev/gemini-api/docs/billing', '_blank');
-      }
-    } catch (e) {
-      console.error("Key selection failed", e);
+  useEffect(() => {
+    if (quotaCooldown > 0) {
+      const timer = setTimeout(() => setQuotaCooldown(quotaCooldown - 1), 1000);
+      return () => clearTimeout(timer);
     }
-  };
+  }, [quotaCooldown]);
 
   const resetSession = () => {
-    analysisLock.current = null;
+    isExecutingAnalysis.current = false;
     conversationHistory.current = [];
     setCurrentContent(null);
     setMessages([]);
-    setHasQuotaError(false);
+    setQuotaCooldown(0);
+    setIsDailyLocked(false);
+    setUseSearch(false);
+    setShowSummaryMobile(false);
   };
 
-  const handleFileUpload = async (file: File, base64: string) => {
-    if (analysisLock.current === base64) return;
-    analysisLock.current = base64;
+  const handleQuotaError = (error: any) => {
+    const msg = (error.message || "").toLowerCase();
+    // Your log shows 21/20 RPD. This matches "exceeded your current quota" or specific Daily triggers.
+    if (msg.includes('daily') || msg.includes('day') || msg.includes('quota exhausted') || msg.includes('exceeded your current quota')) {
+      setIsDailyLocked(true);
+    } else {
+      setQuotaCooldown(60);
+    }
+    setStatus(AnalysisStatus.ERROR);
+  };
+
+  const startAnalysis = async (type: 'pdf' | 'youtube' | 'github', action: () => Promise<any>, data: Partial<ContentData>) => {
+    if (isExecutingAnalysis.current || isDailyLocked) return;
+    isExecutingAnalysis.current = true;
     
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Scanning Neural PDF...');
-    setCurrentContent({ name: file.name, size: (file.size / 1024).toFixed(1) + ' KB', type: 'pdf', base64: base64 });
+    setLoadingMsg(`Scanning ${type.toUpperCase()}...`);
+    setCurrentContent(data as ContentData);
     
     try {
-      const summary = await analyzeDocument(base64, file.type);
-      setCurrentContent(prev => prev ? { ...prev, summary } : null);
+      const result = await action();
+      const summary = typeof result === 'string' ? result : result.text;
+      const sources = typeof result === 'string' ? [] : result.sources;
+      
+      setCurrentContent(prev => prev ? { ...prev, summary, sources } : null);
       setStatus(AnalysisStatus.READY);
-      const initMsg = "Neural link established. PDF context parsed successfully.";
-      setMessages([{ id: 'init', role: 'assistant', content: initMsg, timestamp: Date.now() }]);
-      conversationHistory.current = [{ role: 'model', content: initMsg }];
+      
+      const welcome = `Neural mapping complete. Grounding (Web Search) is ${useSearch ? 'ACTIVE' : 'OFF'}. Transmit inquiries below.`;
+      setMessages([{ id: 'init', role: 'assistant', content: welcome, timestamp: Date.now(), sources }]);
+      conversationHistory.current = [{ role: 'model', content: welcome }];
     } catch (error: any) {
-      analysisLock.current = null;
-      setStatus(AnalysisStatus.ERROR);
-      if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
+      console.error("Analysis Error:", error);
+      if (error.status === 429) {
+        handleQuotaError(error);
+      } else {
+        setStatus(AnalysisStatus.ERROR);
+      }
+    } finally {
+      isExecutingAnalysis.current = false;
     }
   };
 
-  const handleLinkUpload = async (url: string) => {
-    if (analysisLock.current === url) return;
-    analysisLock.current = url;
+  const handleFileUpload = (file: File, base64: string) => 
+    startAnalysis('pdf', () => analyzeDocument(base64, file.type), { name: file.name, size: (file.size / 1024).toFixed(1) + ' KB', type: 'pdf', base64 });
 
-    setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Syncing YouTube...');
-    setCurrentContent({ name: 'YouTube Video', type: 'youtube', url: url });
-    
-    try {
-      const result = await analyzeYouTubeLink(url);
-      setCurrentContent(prev => prev ? { ...prev, summary: result.text, sources: result.sources } : null);
-      setStatus(AnalysisStatus.READY);
-      const initMsg = "Video context retrieved. High-speed grounding active.";
-      setMessages([{ id: 'init', role: 'assistant', content: initMsg, timestamp: Date.now(), sources: result.sources }]);
-      conversationHistory.current = [{ role: 'model', content: initMsg }];
-    } catch (error: any) {
-      analysisLock.current = null;
-      setStatus(AnalysisStatus.ERROR);
-      if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
-    }
-  };
+  const handleLinkUpload = (url: string) => 
+    startAnalysis('youtube', () => analyzeYouTubeLink(url), { name: 'YouTube Video', type: 'youtube', url });
 
-  const handleRepoUpload = async (url: string) => {
-    if (analysisLock.current === url) return;
-    analysisLock.current = url;
+  const handleRepoUpload = (url: string) => 
+    startAnalysis('github', () => analyzeGithubRepo(url), { name: url.split('/').pop() || 'Repository', type: 'github', url });
 
-    setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Scanning Repo...');
-    setCurrentContent({ name: url.split('/').pop() || 'Repository', type: 'github', url: url });
-    
-    try {
-      const result = await analyzeGithubRepo(url);
-      setCurrentContent(prev => prev ? { ...prev, summary: result.text, sources: result.sources } : null);
-      setStatus(AnalysisStatus.READY);
-      const initMsg = "Repository indexed. Operational architecture mapped.";
-      setMessages([{ id: 'init', role: 'assistant', content: initMsg, timestamp: Date.now(), sources: result.sources }]);
-      conversationHistory.current = [{ role: 'model', content: initMsg }];
-    } catch (error: any) {
-      analysisLock.current = null;
-      setStatus(AnalysisStatus.ERROR);
-      if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
-    }
-  };
-
-  // stable function with zero dependencies prevents rerender logic loops
   const handleSendMessage = useCallback(async (text: string) => {
-    if (!currentContent || isProcessing) return;
+    if (!currentContent || isProcessing || quotaCooldown > 0 || isDailyLocked) return;
 
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
     const aiMsgPlaceholder: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', timestamp: Date.now(), sources: [] };
@@ -145,7 +116,7 @@ const App: React.FC = () => {
       
       for await (const chunk of stream) {
         fullContent += chunk.text;
-        if (chunk.sources && chunk.sources.length > 0) {
+        if (chunk.sources) {
           chunk.sources.forEach(s => {
             if (!allSources.find(as => as.uri === s.uri)) allSources.push(s);
           });
@@ -161,72 +132,106 @@ const App: React.FC = () => {
 
       conversationHistory.current.push({ role: 'user', content: text });
       conversationHistory.current.push({ role: 'model', content: fullContent });
-
     } catch (error: any) {
-      if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
+      if (error.status === 429) handleQuotaError(error);
     } finally {
       setIsProcessing(false);
     }
-  }, [currentContent, isProcessing, useSearch]);
+  }, [currentContent, isProcessing, useSearch, quotaCooldown, isDailyLocked]);
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-slate-950 overflow-hidden selection:bg-emerald-500/30">
-      <nav className="border-b border-white/5 bg-slate-900/40 backdrop-blur-xl shrink-0 h-16">
-        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.location.reload()}>
-            <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg transition-all active:scale-95">
-              <i className="fa-solid fa-brain text-white text-sm"></i>
-            </div>
-            <h1 className="text-xl font-bold tracking-tighter text-slate-100">DOC<span className="text-emerald-500">MIND</span></h1>
+    <div className="flex flex-col h-full bg-slate-950 overflow-hidden relative">
+      <div className="scanline"></div>
+      
+      <nav className="shrink-0 h-16 border-b border-white/5 bg-slate-900/40 backdrop-blur-xl z-50 px-4 md:px-6 flex items-center justify-between">
+        <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={() => window.location.reload()}>
+          <div className="w-8 h-8 md:w-9 md:h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <i className="fa-solid fa-brain text-white text-xs md:text-sm"></i>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setUseSearch(!useSearch)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-[10px] font-bold uppercase tracking-widest ${
-                useSearch ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'
-              }`}
-            >
-              <i className={`fa-solid ${useSearch ? 'fa-globe' : 'fa-magnifying-glass'}`}></i>
-              {useSearch ? 'Grounding On' : 'Search Off'}
-            </button>
-          </div>
+          <h1 className="text-lg md:text-xl font-bold tracking-tighter text-slate-100">DOC<span className="text-emerald-500">MIND</span></h1>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              if (isDailyLocked) return;
+              setUseSearch(!useSearch);
+            }}
+            disabled={isDailyLocked}
+            className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl border transition-all text-[9px] md:text-[10px] font-black uppercase tracking-widest ${
+              isDailyLocked ? 'bg-slate-900 border-slate-800 text-slate-700 opacity-50' :
+              useSearch ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'
+            }`}
+          >
+            <i className={`fa-solid ${useSearch ? 'fa-globe' : 'fa-magnifying-glass-slash'}`}></i>
+            <span className="hidden sm:inline">{isDailyLocked ? 'Exhausted' : (useSearch ? 'Search On' : 'Search Off')}</span>
+            <span className="sm:hidden">{isDailyLocked ? 'Lock' : (useSearch ? 'On' : 'Off')}</span>
+          </button>
         </div>
       </nav>
 
-      <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col min-h-0 overflow-hidden relative">
-        {!currentContent ? (
-          <div className="h-full flex flex-col items-center justify-center animate-fade-up">
-            <h2 className="text-4xl md:text-6xl font-black text-slate-100 mb-4 text-center leading-tight tracking-tighter">Instant <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">Intelligence.</span></h2>
-            <p className="text-slate-400 text-sm mb-12 text-center max-w-lg font-medium opacity-80 uppercase tracking-widest">Neural AI Terminal</p>
+      <main className="flex-1 max-w-7xl mx-auto w-full p-3 md:p-6 flex flex-col min-h-0 overflow-hidden relative z-10">
+        {isDailyLocked ? (
+          <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto animate-in fade-in zoom-in px-4">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-red-500/10 rounded-full flex items-center justify-center border border-red-500/30 mb-6 md:mb-8 animate-pulse">
+              <i className="fa-solid fa-battery-empty text-2xl md:text-3xl text-red-500"></i>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-black text-slate-100 mb-4 tracking-tighter uppercase">Daily Quota <span className="text-red-500">Exhausted</span></h2>
+            <p className="text-slate-400 text-xs md:text-sm mb-8 leading-relaxed">
+              Based on your logs (21/20), you have exceeded your **Daily Limit (RPD)**. Neural link will reset at Midnight Pacific Time.
+            </p>
+            <button 
+              onClick={resetSession}
+              className="px-6 py-3 md:px-8 md:py-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all shadow-xl"
+            >
+              Reset Session Buffer
+            </button>
+          </div>
+        ) : !currentContent ? (
+          <div className="h-full flex flex-col items-center justify-center animate-fade-up px-4">
+            <h2 className="text-3xl md:text-6xl font-black text-slate-100 mb-2 text-center tracking-tighter uppercase">Terminal <span className="text-emerald-500">Active.</span></h2>
+            <p className="text-slate-500 text-[8px] md:text-[10px] mb-8 md:mb-12 text-center uppercase tracking-[0.4em] font-bold opacity-60">Neural Engine v3.1 Deployment</p>
             <FileUpload 
               onUpload={handleFileUpload} 
               onLink={handleLinkUpload} 
-              onRepo={handleRepoUpload}
+              onRepo={handleRepoUpload} 
               isLoading={status === AnalysisStatus.ANALYZING} 
-              loadingMessage={loadingMsg}
+              loadingMessage={loadingMsg} 
             />
+            {quotaCooldown > 0 && (
+              <div className="mt-8 text-amber-500 font-bold text-[10px] uppercase tracking-widest animate-pulse">
+                Minute Cooling: {quotaCooldown}s
+              </div>
+            )}
           </div>
         ) : (
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-hidden h-full">
-            <div className="lg:col-span-4 h-full overflow-y-auto custom-scrollbar pr-1 shrink-0">
-              <DocumentStats content={currentContent} onSelectQuery={handleSendMessage} />
+          <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 gap-4 md:gap-6 min-h-0 overflow-hidden">
+            <div className={`lg:col-span-4 shrink-0 transition-all duration-300 ${showSummaryMobile ? 'block' : 'hidden lg:block'} overflow-y-auto custom-scrollbar pr-1`}>
+               <div className="lg:hidden mb-4">
+                  <button onClick={() => setShowSummaryMobile(false)} className="flex items-center gap-2 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                    <i className="fa-solid fa-chevron-left"></i> Back to Link
+                  </button>
+               </div>
+               <DocumentStats content={currentContent} onSelectQuery={(q) => { setShowSummaryMobile(false); handleSendMessage(q); }} />
             </div>
-            <div className="lg:col-span-8 h-full min-h-0 flex flex-col overflow-hidden bg-slate-900/20 rounded-3xl border border-white/5 shadow-2xl">
+            
+            <div className={`lg:col-span-8 flex flex-col min-h-0 relative ${showSummaryMobile ? 'hidden lg:flex' : 'flex'}`}>
+              <div className="lg:hidden mb-2 flex justify-between items-center bg-slate-900/40 p-2 rounded-xl border border-white/5">
+                <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest ml-2 truncate max-w-[50%]">{currentContent.name}</span>
+                <button onClick={() => setShowSummaryMobile(true)} className="bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border border-emerald-500/20">
+                  Summary
+                </button>
+              </div>
               <Chat messages={messages} onSendMessage={handleSendMessage} onReset={resetSession} isProcessing={isProcessing} />
+              {quotaCooldown > 0 && (
+                <div className="absolute top-16 lg:top-4 left-1/2 -translate-x-1/2 bg-amber-600/90 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest shadow-2xl z-50">
+                  Minute Limit: {quotaCooldown}s Cooldown
+                </div>
+              )}
             </div>
           </div>
         )}
       </main>
-      
-      {hasQuotaError && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] bg-red-600/95 backdrop-blur-md text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-4 border border-white/20 animate-in slide-in-from-bottom-5">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Neural Congestion (429)</span>
-          <button onClick={handleSwitchKey} className="bg-white text-red-600 px-3 py-1 rounded-full text-[9px] font-black uppercase hover:bg-slate-100 transition-colors">
-            Switch Key
-          </button>
-        </div>
-      )}
     </div>
   );
 };
