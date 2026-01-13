@@ -17,12 +17,12 @@ const MessageBubble = memo(({ msg }: { msg: Message }) => (
         : 'bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-none'
     }`}>
       <div className="whitespace-pre-wrap text-sm leading-relaxed prose-invert prose-emerald">
-        {msg.content || (msg.role === 'assistant' ? 'Synthesizing...' : '')}
+        {msg.content || (msg.role === 'assistant' ? 'Connecting...' : '')}
       </div>
       
       {msg.sources && msg.sources.length > 0 && (
         <div className="mt-4 pt-3 border-t border-slate-700/50">
-          <p className="text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-2">Neural Sources</p>
+          <p className="text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-2">Neural Grounding</p>
           <div className="flex flex-wrap gap-2">
             {msg.sources.map((s, i) => (
               <a 
@@ -67,18 +67,18 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
   };
 
   return (
-    <div className="flex flex-col h-full glass-panel rounded-3xl overflow-hidden shadow-2xl">
-      <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/30">
+    <div className="flex flex-col h-full max-h-full glass-panel rounded-3xl overflow-hidden shadow-2xl bg-slate-900/40">
+      <div className="shrink-0 px-6 py-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
             <i className="fa-solid fa-brain text-emerald-500 text-lg"></i>
           </div>
           <div>
-            <h2 className="font-semibold text-slate-100 text-sm">Brain Terminal</h2>
+            <h2 className="font-semibold text-slate-100 text-sm">Neural Terminal</h2>
             <div className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
               <span className={`text-[10px] uppercase tracking-widest font-bold ${isProcessing ? 'text-amber-500' : 'text-emerald-500'}`}>
-                {isProcessing ? 'Processing' : 'Neural Active'}
+                {isProcessing ? 'Syncing...' : 'Link Active'}
               </span>
             </div>
           </div>
@@ -88,19 +88,17 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
         </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-2 custom-scrollbar scroll-smooth">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 custom-scrollbar scroll-smooth min-h-0">
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center opacity-50 space-y-4">
-            <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
-              <i className="fa-regular fa-comment-dots text-3xl text-slate-500"></i>
-            </div>
-            <p className="text-slate-400 max-w-xs text-sm font-medium">Neural interface ready.</p>
+          <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+            <i className="fa-regular fa-comment-dots text-4xl text-slate-500 mb-4"></i>
+            <p className="text-slate-400 text-sm font-medium uppercase tracking-[0.2em]">Ready for Transmission</p>
           </div>
         )}
         {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
       </div>
 
-      <div className="p-4 bg-slate-800/50 border-t border-slate-700">
+      <div className="shrink-0 p-4 bg-slate-800/50 border-t border-slate-700">
         <form onSubmit={handleSubmit} className="relative">
           <input
             ref={inputRef}
@@ -108,14 +106,14 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isProcessing}
-            placeholder={isProcessing ? "Processing..." : "Ask DOC-MIND..."}
-            className="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-2xl px-5 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-slate-600 shadow-inner text-sm"
+            placeholder={isProcessing ? "Neural Link Cooling Down..." : "Ask DOC-MIND..."}
+            className="w-full bg-slate-950/80 border border-slate-700 text-slate-100 rounded-2xl px-5 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-slate-700 shadow-inner text-sm"
           />
           <button
             type="submit"
             disabled={!input.trim() || isProcessing}
             className={`absolute right-2 top-2 bottom-2 w-12 flex items-center justify-center rounded-xl transition-all ${
-              input.trim() && !isProcessing ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg' : 'bg-slate-800 text-slate-600'
+              input.trim() && !isProcessing ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg' : 'bg-slate-800 text-slate-700'
             }`}
           >
             <i className={`fa-solid ${isProcessing ? 'fa-circle-notch animate-spin' : 'fa-paper-plane'}`}></i>

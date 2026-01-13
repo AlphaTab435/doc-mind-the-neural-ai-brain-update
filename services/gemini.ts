@@ -2,24 +2,24 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GroundingSource } from "../types";
 
-// Switching both to Flash 3 as it supports Search/Grounding with much higher rate limits
+// gemini-3-flash-preview is the most robust for high-frequency tasks
 const LITE_MODEL = 'gemini-3-flash-preview';
 const SEARCH_MODEL = 'gemini-3-flash-preview'; 
 
 /**
- * Creates a fresh AI instance.
- * Strictly uses process.env.API_KEY as per GenAI SDK guidelines.
- * Vite replaces this variable at build time.
+ * Strictly uses process.env.API_KEY.
  */
 const getAI = () => {
   const apiKey = (process as any).env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API_KEY_MISSING");
-  }
+  if (!apiKey) throw new Error("API_KEY_MISSING");
   return new GoogleGenAI({ apiKey });
 };
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 3000): Promise<T> {
+/**
+ * Enhanced retry logic for the free tier. 
+ * Free tier is 15 RPM. If we hit 429, we must wait significantly.
+ */
+async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 5000): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
@@ -27,9 +27,10 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 3000)
     const isRateLimit = errorMsg.includes('429') || error.status === 429 || errorMsg.includes('RESOURCE_EXHAUSTED');
     
     if (retries > 0 && isRateLimit) {
-      // Exponential backoff with jitter
-      const delay = baseDelay * (6 - retries) + Math.random() * 2000;
-      console.warn(`Neural link congestion (429). Retrying in ${Math.round(delay)}ms...`);
+      // Free tier requires patience. 5s, 10s, 15s...
+      const retryCount = 6 - retries;
+      const delay = baseDelay * retryCount + Math.random() * 2000;
+      console.warn(`[429] Neural Congestion. Attempt ${retryCount}/5. Cooldown: ${Math.round(delay)}ms`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return withRetry(fn, retries - 1, baseDelay);
     }
@@ -43,7 +44,7 @@ const extractSources = (response: any): GroundingSource[] => {
   if (chunks) {
     chunks.forEach((chunk: any) => {
       if (chunk.web) {
-        sources.push({ title: chunk.web.title || 'Verified Web Link', uri: chunk.web.uri });
+        sources.push({ title: chunk.web.title || 'Source Verified', uri: chunk.web.uri });
       }
     });
   }
@@ -74,15 +75,15 @@ export const analyzeGithubRepo = async (url: string) => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Perform architectural scan of GitHub repo: ${url}. List core features and tech stack based on README.`,
+      contents: `Perform brief architectural scan of: ${url}. List core features and tech stack.`,
       config: {
-        systemInstruction: "You are a senior repo auditor. Use googleSearch to find the README and project structure. Respond in technical bullet points.",
+        systemInstruction: "You are a senior repo auditor. Use googleSearch strictly for README discovery. Conciseness is mandatory.",
         tools: [{ googleSearch: {} }],
         temperature: 0.1
       }
     });
     return {
-      text: response.text || "Scanning complete.",
+      text: response.text || "Scan complete.",
       sources: extractSources(response)
     };
   });
@@ -93,15 +94,15 @@ export const analyzeYouTubeLink = async (url: string) => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Neural synchronization of YouTube video: ${url}. Provide a high-level summary.`,
+      contents: `Quick summary of YouTube video: ${url}`,
       config: {
-        systemInstruction: "You are a video intelligence agent. Use googleSearch to identify the video title and core topics.",
+        systemInstruction: "You are a video agent. Use googleSearch to find metadata. Response limit: 100 words.",
         tools: [{ googleSearch: {} }],
         temperature: 0.1
       }
     });
     return {
-      text: response.text || "Video synchronized.",
+      text: response.text || "Sync complete.",
       sources: extractSources(response)
     };
   });
@@ -115,11 +116,11 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          { text: "Briefly summarize the main points in 3-5 bullets." }
+          { text: "Brief 3-bullet summary." }
         ]
       },
       config: { 
-        systemInstruction: "Document analysis engine. Provide absolute technical precision.",
+        systemInstruction: "Technical document analyzer. No preamble.",
         temperature: 0.1
       }
     });
@@ -138,15 +139,13 @@ export async function* askQuestionStream(
     parts: [{ text: msg.content }]
   }));
 
-  // Both models are Flash 3 now to avoid Pro-specific 429s
   const activeModel = LITE_MODEL;
-
   const parts: any[] = [];
   if (content.type === 'pdf' && content.base64) {
     parts.push({ inlineData: { data: content.base64, mimeType: content.mimeType } });
   }
   
-  const contextPrefix = content.url ? `CONTEXT TARGET: ${content.url}\n` : '';
+  const contextPrefix = content.url ? `TARGET: ${content.url}\n` : '';
   parts.push({ text: `${contextPrefix}INQUIRY: ${question}` });
 
   try {
@@ -155,7 +154,7 @@ export async function* askQuestionStream(
       model: activeModel,
       contents: [...historyContents, { role: 'user', parts }],
       config: {
-        systemInstruction: "You are DOC-MIND, a neural interface. Respond with absolute technical precision. Use Markdown.",
+        systemInstruction: "You are DOC-MIND. Technical precision only. Use Markdown.",
         temperature: 0.2,
         tools: (useSearch || content.type !== 'pdf') ? [{ googleSearch: {} }] : undefined
       }
@@ -168,10 +167,9 @@ export async function* askQuestionStream(
     const errorMsg = err.message || "";
     const isRateLimit = errorMsg.includes('429') || err.status === 429 || errorMsg.includes('RESOURCE_EXHAUSTED');
     if (isRateLimit) {
-      yield { text: "⚠️ NEURAL CONGESTION: The system is receiving too many requests. Please try again in 30 seconds or click 'Switch Neural Key' to use your own dedicated project key.", sources: [] };
+      yield { text: "⚠️ SYSTEM COOLDOWN: Neural link is saturated (15 RPM Limit). Retrying automatically in a few seconds... If this persists, please use your own key.", sources: [] };
     } else {
-      console.error("Stream Error:", err);
-      yield { text: "Neural link interrupted. This can happen if the content is restricted or the session timed out.", sources: [] };
+      yield { text: "Neural link interrupted. Session expired or content restricted.", sources: [] };
     }
     throw err;
   }
