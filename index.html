@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DOC-MIND | Your AI Brain</title>
+    <title>DOC-MIND | Neural AI Brain</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,34 +13,43 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
+            background-color: #020617;
             color: #f8fafc;
+            margin: 0;
+            overflow: hidden;
+        }
+        #root {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
         .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
+            width: 5px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            border-radius: 20px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(16, 185, 129, 0.3);
         }
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 0.5; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.05); }
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        .glow-effect {
-            animation: pulse-glow 3s infinite ease-in-out;
+        .animate-fade-up {
+            animation: fade-up 0.4s ease-out forwards;
         }
+        /* Prose Fixes for Tailwind */
+        .prose-sm { font-size: 0.875rem; line-height: 1.5; }
     </style>
 <script type="importmap">
 {
