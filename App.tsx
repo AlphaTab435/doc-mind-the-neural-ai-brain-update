@@ -9,12 +9,14 @@ import { analyzeDocument, analyzeYouTubeLink, analyzeGithubRepo, askQuestionStre
 const App: React.FC = () => {
   const [currentContent, setCurrentContent] = useState<ContentData | null>(null);
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
+  const [loadingMsg, setLoadingMsg] = useState('Mapping Context...');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
 
   const handleFileUpload = async (file: File, base64: string) => {
     setStatus(AnalysisStatus.ANALYZING);
+    setLoadingMsg('Scanning Neural PDF...');
     setCurrentContent({ name: file.name, size: file.size.toString(), type: 'pdf', base64: base64 });
     try {
       const summary = await analyzeDocument(base64, file.type);
@@ -30,6 +32,7 @@ const App: React.FC = () => {
 
   const handleLinkUpload = async (url: string) => {
     setStatus(AnalysisStatus.ANALYZING);
+    setLoadingMsg('Fetching Web Context...');
     setCurrentContent({ name: 'YouTube Content', type: 'youtube', url: url });
     try {
       const summary = await analyzeYouTubeLink(url);
@@ -45,6 +48,7 @@ const App: React.FC = () => {
 
   const handleRepoUpload = async (url: string) => {
     setStatus(AnalysisStatus.ANALYZING);
+    setLoadingMsg('Mapping Code Architecture...');
     setCurrentContent({ name: url.split('/').pop() || 'Repo', type: 'github', url: url });
     try {
       const summary = await analyzeGithubRepo(url);
@@ -93,7 +97,7 @@ const App: React.FC = () => {
     } catch (error: any) {
       setMessages(prev => {
         const newMsgs = [...prev];
-        newMsgs[newMsgs.length - 1].content = "Neural connection unstable. Context grounding may be limited for this source.";
+        newMsgs[newMsgs.length - 1].content = "Neural connection unstable. Search tool might be timing out or context is too large.";
         return newMsgs;
       });
     } finally {
@@ -135,6 +139,7 @@ const App: React.FC = () => {
               onLink={handleLinkUpload} 
               onRepo={handleRepoUpload}
               isLoading={status === AnalysisStatus.ANALYZING} 
+              loadingMessage={loadingMsg}
             />
           </div>
         ) : (

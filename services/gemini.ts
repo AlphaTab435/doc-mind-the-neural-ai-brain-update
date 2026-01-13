@@ -1,10 +1,7 @@
+
 import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
 
-// Standardizing on process.env.API_KEY as per GenAI guidelines
-// Removed local getAIClient and reference to vite/client to resolve environment typing issues
-
 export const generateSpeech = async (text: string) => {
-  // Initialize AI client right before use as per guidelines
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
@@ -19,7 +16,6 @@ export const generateSpeech = async (text: string) => {
         },
       },
     });
-    // response.text is a property, but for AUDIO we extract from inlineData
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) throw new Error("No audio data received");
     return base64Audio;
@@ -29,18 +25,17 @@ export const generateSpeech = async (text: string) => {
 };
 
 export const analyzeGithubRepo = async (url: string) => {
-  // Initialize AI client right before use
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `Perform a deep architecture analysis of this GitHub repo: ${url}. 
-  Describe:
-  1. High-level architecture (Monolith, Microservices, etc.)
-  2. Tech stack identified
-  3. Key folder responsibilities
-  4. Where major logic (Auth, API, UI) is likely located.
-  Keep it professional and structured for a new developer onboarding.`;
+  // Explicitly command the model to use the tool
+  const prompt = `I need you to use the googleSearch tool to fetch and analyze the content of this GitHub repository: ${url}. 
+  Do not guess. Use the search tool to find the README, file structure, and main purpose.
+  Provide a professional summary:
+  1. Primary Programming Languages
+  2. Core Tech Stack
+  3. High-level architecture (Monolith, Microservices, etc.)
+  4. Project Goal.`;
   
   try {
-    // Use gemini-3-pro-preview for complex reasoning tasks like architecture analysis
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
@@ -48,20 +43,23 @@ export const analyzeGithubRepo = async (url: string) => {
         tools: [{ googleSearch: {} }]
       }
     });
-    // Accessing text as a property, not a method
-    return response.text || "";
+    return response.text || "Neural mapping complete. You can now ask questions about this codebase.";
   } catch (error: any) {
-    throw new Error("Repository analysis failed. Ensure it is a public repo.");
+    console.error("Repo Analysis Error:", error);
+    throw new Error("Repository analysis failed. Ensure it is a public repository.");
   }
 };
 
 export const analyzeYouTubeLink = async (url: string) => {
-  // Initialize AI client right before use
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `Analyze this YouTube video: ${url}. Provide a concise summary: title, channel name, and 3 key takeaways based on your search grounding or knowledge. No fluff.`;
+  // Explicitly command the model to use the tool
+  const prompt = `I need you to use the googleSearch tool to retrieve details about this YouTube video: ${url}.
+  Do not guess. Fetch the title, channel name, and a summary of the topics discussed.
+  Provide:
+  - Video Title & Author
+  - 3-5 Main takeaways from the content.`;
   
   try {
-    // Use gemini-3-flash-preview for basic summarization tasks
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -69,19 +67,17 @@ export const analyzeYouTubeLink = async (url: string) => {
         tools: [{ googleSearch: {} }]
       }
     });
-    // Accessing text as a property
-    return response.text || "";
+    return response.text || "Video synchronized. Brain terminal is ready for queries.";
   } catch (error: any) {
-    throw new Error("Video integration failed.");
+    console.error("YouTube Analysis Error:", error);
+    throw new Error("YouTube integration failed. Check the URL and try again.");
   }
 };
 
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
-  // Initialize AI client right before use
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `Quickly summarize this doc: type, main purpose, 3 bullet points. No fluff.`;
+  const prompt = `Perform a high-speed neural scan of this document. Provide 3 core bullet points summarizing its content and purpose.`;
   try {
-    // Basic text task uses flash model
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -91,10 +87,9 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
         ]
       }
     });
-    // Accessing text as a property
     return response.text || "";
   } catch (error: any) {
-    throw new Error("Analysis failed.");
+    throw new Error("Document analysis failed.");
   }
 };
 
@@ -104,7 +99,6 @@ export async function* askQuestionStream(
   history: { role: string; content: string }[],
   useSearch: boolean = false
 ) {
-  // Initialize AI client right before use
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const historyContents = history.map(msg => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
@@ -112,7 +106,7 @@ export async function* askQuestionStream(
   }));
 
   const config: any = { temperature: 0.1 };
-  // Search grounding tool is enabled for web-based content or explicit user request
+  // URLs ALWAYS require search grounding for context updates
   if (useSearch || content.type === 'youtube' || content.type === 'github') {
     config.tools = [{ googleSearch: {} }];
   }
@@ -122,15 +116,9 @@ export async function* askQuestionStream(
     parts.push({ inlineData: { data: content.base64, mimeType: content.mimeType } });
   }
   
-  const contextPrefix = {
-    pdf: "Document analysis active.",
-    youtube: `YouTube Video analysis (${content.url}) via Search Grounding.`,
-    github: `GitHub Repository Onboarding (${content.url}) via Search Grounding.`
-  }[content.type];
+  const contextHeader = content.url ? `SOURCE URL: ${content.url}\n` : '';
+  parts.push({ text: `${contextHeader}Analyze the context and answer: ${question}` });
 
-  parts.push({ text: `${contextPrefix} User Question: ${question}` });
-
-  // Use gemini-3-pro-preview for high-quality complex reasoning in conversation
   const responseStream = await ai.models.generateContentStream({
     model: 'gemini-3-pro-preview',
     contents: [...historyContents, { role: 'user', parts }],
@@ -138,7 +126,6 @@ export async function* askQuestionStream(
   });
 
   for await (const chunk of responseStream) {
-    // Accessing chunk.text as a property in the stream
     const text = chunk.text;
     if (text) yield text;
   }

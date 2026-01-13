@@ -6,14 +6,13 @@ interface FileUploadProps {
   onLink: (url: string) => void;
   onRepo: (url: string) => void;
   isLoading: boolean;
+  loadingMessage?: string;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo, isLoading }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo, isLoading, loadingMessage }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [url, setUrl] = useState('');
+  const [input, setInput] = useState('');
   const [mode, setMode] = useState<'file' | 'link' | 'repo'>('file');
-
-  const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -37,31 +36,31 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url) return;
-    if (mode === 'link') onLink(url);
-    else if (mode === 'repo') onRepo(url);
+    if (!input) return;
+    if (mode === 'link') onLink(input);
+    else if (mode === 'repo') onRepo(input);
   };
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6 animate-in fade-in zoom-in duration-500">
       <div className="flex p-1 bg-slate-900/80 rounded-2xl border border-slate-700 w-fit mx-auto">
         <button 
-          onClick={() => setMode('file')}
+          onClick={() => { setMode('file'); setInput(''); }}
           className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'file' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
           Neural PDF
         </button>
         <button 
-          onClick={() => setMode('link')}
+          onClick={() => { setMode('link'); setInput(''); }}
           className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'link' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
           YouTube
         </button>
         <button 
-          onClick={() => setMode('repo')}
+          onClick={() => { setMode('repo'); setInput(''); }}
           className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'repo' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
         >
-          Onboarding
+          Repo
         </button>
       </div>
 
@@ -90,22 +89,22 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo
                 <i className="fa-solid fa-file-pdf"></i>
               </div>
               <h3 className="text-xl font-semibold mb-2 text-slate-100">Drop PDF to Analyze</h3>
-              <p className="text-sm text-slate-400">Contracts, Invoices, or Resumes.</p>
+              <p className="text-sm text-slate-400">Scan contracts, resumes, or manuals.</p>
             </div>
           </>
         ) : (
           <form onSubmit={handleSubmit} className="w-full px-8 text-center space-y-6">
             <div className={`${mode === 'link' ? 'text-red-500' : 'text-indigo-400'} text-5xl mb-2`}>
-              <i className={`fa-brands ${mode === 'link' ? 'fa-youtube' : 'fa-github'}`}></i>
+              <i className={`fa-solid ${mode === 'link' ? 'fa-brands fa-youtube' : 'fa-brands fa-github'}`}></i>
             </div>
             <h3 className="text-xl font-semibold text-slate-100">
-              {mode === 'link' ? 'Sync Video Content' : 'Repo Onboarding Buddy'}
+              {mode === 'link' ? 'Sync Video Content' : 'Repo Onboarding'}
             </h3>
             <div className="relative">
               <input 
                 type="text" 
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
                 placeholder={mode === 'link' ? "Paste YouTube Link..." : "GitHub Repository URL..."}
                 className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-5 py-4 text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500/50"
               />
@@ -116,15 +115,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, onLink, onRepo
                 Connect
               </button>
             </div>
-            <p className="text-xs text-slate-500 italic">Neural engine will map architecture via Deep Search Grounding.</p>
+            <p className="text-xs text-slate-500 italic">Neural engine will map content via Deep Search Grounding.</p>
           </form>
         )}
 
         {isLoading && (
           <div className="absolute inset-0 bg-slate-900/60 rounded-3xl flex items-center justify-center backdrop-blur-sm z-10">
             <div className="flex flex-col items-center">
-              <div className="w-10 h-10 border-4 border-slate-700 border-t-white rounded-full animate-spin"></div>
-              <span className="mt-4 font-medium animate-pulse text-slate-100">Mapping Context...</span>
+              <div className={`w-10 h-10 border-4 border-slate-700 border-t-white rounded-full animate-spin`}></div>
+              <span className="mt-4 font-medium animate-pulse text-slate-100 text-sm">{loadingMessage || 'Mapping Context...'}</span>
             </div>
           </div>
         )}
