@@ -2,13 +2,13 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GroundingSource } from "../types";
 
-// Using recommended models based on task type
 const LITE_MODEL = 'gemini-3-flash-preview';
 const SEARCH_MODEL = 'gemini-3-pro-preview';
 
 /**
  * Creates a fresh AI instance.
- * Always call this right before an API request to ensure the latest API key is used.
+ * Strictly uses process.env.API_KEY as per GenAI SDK guidelines.
+ * Vite replaces this variable at build time.
  */
 const getAI = () => {
   const apiKey = process.env.API_KEY;
@@ -25,7 +25,6 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 4000)
     const isRateLimit = error.message?.includes('429') || error.status === 429 || error.message?.includes('RESOURCE_EXHAUSTED');
     if (retries > 0 && isRateLimit) {
       const delay = baseDelay + Math.random() * 2000;
-      console.warn(`Quota limit reached. Retrying in ${Math.round(delay)}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return withRetry(fn, retries - 1, baseDelay * 2);
     }
@@ -59,7 +58,6 @@ export const generateSpeech = async (text: string) => {
         },
       },
     });
-    // For audio output, we access inlineData from the first candidate's part
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) throw new Error("AUDIO_EMPTY");
     return base64Audio;
@@ -158,15 +156,14 @@ export async function* askQuestionStream(
     });
 
     for await (const chunk of responseStream) {
-      // Correctly access .text property from stream chunk as per guidelines
       if (chunk.text) yield { text: chunk.text, sources: extractSources(chunk) };
     }
   } catch (err: any) {
     const isRateLimit = err.message?.includes('429') || err.status === 429 || err.message?.includes('RESOURCE_EXHAUSTED');
     if (isRateLimit) {
-      yield { text: "⚠️ QUOTA EXHAUSTED: This shared key has reached its limit. Please click 'Switch Neural Key' in the top bar to use your own key.", sources: [] };
+      yield { text: "⚠️ QUOTA EXHAUSTED: Please use 'Switch Neural Key' to continue.", sources: [] };
     } else {
-      yield { text: "Neural link interrupted. This usually occurs if the source link is restricted or grounding takes too long.", sources: [] };
+      yield { text: "Neural link interrupted.", sources: [] };
     }
     throw err;
   }
