@@ -1,14 +1,17 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Chat } from './components/Chat';
 import { DocumentStats } from './components/DocumentStats';
 import { Message, ContentData, AnalysisStatus, GroundingSource } from './types';
 import { analyzeDocument, analyzeYouTubeLink, analyzeGithubRepo, askQuestionStream } from './services/gemini';
 
-// Global declaration for AI Studio key management
-// Use existing AIStudio type and optional modifier to resolve type collision errors
+// Define the interface for the AI Studio key manager within the global scope to fix the declaration conflict
 declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
   interface Window {
     aistudio?: AIStudio;
   }
@@ -23,13 +26,14 @@ const App: React.FC = () => {
   const [useSearch, setUseSearch] = useState(false);
   const [hasQuotaError, setHasQuotaError] = useState(false);
 
-  // Check if a user key is available
   const handleSwitchKey = async () => {
     try {
       if (window.aistudio) {
         await window.aistudio.openSelectKey();
         setHasQuotaError(false);
-        // Key selection is assumed successful per guidelines to avoid race condition delays
+        // We proceed immediately assuming the key selection UI handled the user interaction
+      } else {
+        window.open('https://ai.google.dev/gemini-api/docs/billing', '_blank');
       }
     } catch (e) {
       console.error("Key selection failed", e);
@@ -44,16 +48,13 @@ const App: React.FC = () => {
       const summary = await analyzeDocument(base64, file.type);
       setCurrentContent(prev => prev ? { ...prev, summary } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Neural link established. I have scanned the document.`, timestamp: Date.now() }]);
+      setMessages([{ id: 'init', role: 'assistant', content: `Neural link established. Document context parsed successfully.`, timestamp: Date.now() }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
-      // Handle quota issues or missing entity errors which require key refresh
       if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
-      } else if (error.message?.includes('Requested entity was not found')) {
-        handleSwitchKey();
       }
-      alert("Neural analysis failed. Check your connection or quota.");
+      console.error(error);
     }
   };
 
@@ -65,15 +66,12 @@ const App: React.FC = () => {
       const result = await analyzeYouTubeLink(url);
       setCurrentContent(prev => prev ? { ...prev, summary: result.text, sources: result.sources } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Video context retrieved via Deep Grounding.`, timestamp: Date.now(), sources: result.sources }]);
+      setMessages([{ id: 'init', role: 'assistant', content: `Video context retrieved. High-speed grounding active.`, timestamp: Date.now(), sources: result.sources }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
       if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
-      } else if (error.message?.includes('Requested entity was not found')) {
-        handleSwitchKey();
       }
-      alert("Grounding error. YouTube links require search quota.");
     }
   };
 
@@ -85,15 +83,12 @@ const App: React.FC = () => {
       const result = await analyzeGithubRepo(url);
       setCurrentContent(prev => prev ? { ...prev, summary: result.text, sources: result.sources } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Repository successfully indexed. Mapping architecture...`, timestamp: Date.now(), sources: result.sources }]);
+      setMessages([{ id: 'init', role: 'assistant', content: `Repository successfully indexed. Ready for architectural queries.`, timestamp: Date.now(), sources: result.sources }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
       if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
-      } else if (error.message?.includes('Requested entity was not found')) {
-        handleSwitchKey();
       }
-      alert("Repo Grounding Error. Repo must be public.");
     }
   };
 
@@ -140,8 +135,6 @@ const App: React.FC = () => {
     } catch (error: any) {
       if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
         setHasQuotaError(true);
-      } else if (error.message?.includes('Requested entity was not found')) {
-        handleSwitchKey();
       }
     } finally {
       setIsProcessing(false);
@@ -209,9 +202,9 @@ const App: React.FC = () => {
       
       {hasQuotaError && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10">
-          <span className="text-xs font-bold uppercase tracking-widest">Quota Exhausted. Billing required.</span>
+          <span className="text-xs font-bold uppercase tracking-widest">Neural Link Saturated.</span>
           <button onClick={handleSwitchKey} className="bg-white text-red-600 px-4 py-1 rounded-full text-[10px] font-black uppercase hover:bg-slate-100 transition-colors">
-            Provide Personal Key
+            Use Personal Key
           </button>
         </div>
       )}

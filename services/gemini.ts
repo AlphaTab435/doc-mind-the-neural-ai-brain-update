@@ -2,7 +2,8 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GroundingSource } from "../types";
 
-const LITE_MODEL = 'gemini-flash-lite-latest';
+// Using recommended models based on task type
+const LITE_MODEL = 'gemini-3-flash-preview';
 const SEARCH_MODEL = 'gemini-3-pro-preview';
 
 /**
@@ -58,6 +59,7 @@ export const generateSpeech = async (text: string) => {
         },
       },
     });
+    // For audio output, we access inlineData from the first candidate's part
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) throw new Error("AUDIO_EMPTY");
     return base64Audio;
@@ -156,6 +158,7 @@ export async function* askQuestionStream(
     });
 
     for await (const chunk of responseStream) {
+      // Correctly access .text property from stream chunk as per guidelines
       if (chunk.text) yield { text: chunk.text, sources: extractSources(chunk) };
     }
   } catch (err: any) {

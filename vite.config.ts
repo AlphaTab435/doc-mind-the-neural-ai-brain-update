@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -10,10 +11,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    define: {
-      // Shimming process.env.API_KEY for browser compatibility
-      'process.env.API_KEY': JSON.stringify(apiKey)
-    },
+    // Removed define block for process.env.API_KEY to rely on platform-injected environment variables as per guidelines
     server: {
       port: 3000
     },
