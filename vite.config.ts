@@ -2,11 +2,15 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  // Using path literal './' to bypass TypeScript errors regarding process.cwd() availability
+  // Load environment variables from the root directory
   const env = loadEnv(mode, './', '');
   
   return {
     plugins: [react()],
-    // Note: process.env.API_KEY is handled externally by the environment
+    define: {
+      // Shimming process.env.API_KEY for browser compatibility
+      // This maps the required process.env.API_KEY to the VITE_ prefixed variable used in deployment
+      'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY || env.API_KEY)
+    }
   };
 });
