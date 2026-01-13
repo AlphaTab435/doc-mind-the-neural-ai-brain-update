@@ -1,9 +1,15 @@
 
+export interface GroundingSource {
+  title: string;
+  uri: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  sources?: GroundingSource[];
 }
 
 export interface ContentData {
@@ -14,6 +20,7 @@ export interface ContentData {
   url?: string;    // For YouTube/GitHub
   summary?: string;
   thumbnail?: string;
+  sources?: GroundingSource[];
 }
 
 export enum AnalysisStatus {

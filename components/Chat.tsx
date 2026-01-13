@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Message } from '../types';
+import { Message, GroundingSource } from '../types';
 
 interface ChatProps {
   messages: Message[];
@@ -10,15 +10,36 @@ interface ChatProps {
 }
 
 const MessageBubble = memo(({ msg }: { msg: Message }) => (
-  <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-    <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg ${
+  <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300 mb-4`}>
+    <div className={`max-w-[90%] rounded-2xl p-4 shadow-lg ${
       msg.role === 'user' 
         ? 'bg-emerald-600 text-white rounded-tr-none border border-emerald-500/30' 
         : 'bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-none'
     }`}>
       <div className="whitespace-pre-wrap text-sm leading-relaxed prose-invert prose-emerald">
-        {msg.content || (msg.role === 'assistant' ? 'Thinking...' : '')}
+        {msg.content || (msg.role === 'assistant' ? 'Synthesizing...' : '')}
       </div>
+      
+      {msg.sources && msg.sources.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-700/50">
+          <p className="text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-2">Neural Sources</p>
+          <div className="flex flex-wrap gap-2">
+            {msg.sources.map((s, i) => (
+              <a 
+                key={i} 
+                href={s.uri} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-[10px] px-2 py-1 bg-slate-900/50 border border-slate-700 rounded-lg text-emerald-400 hover:text-white hover:border-emerald-500 transition-all flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-link text-[8px]"></i>
+                <span className="truncate max-w-[120px]">{s.title}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={`text-[9px] mt-2 opacity-60 uppercase font-bold tracking-widest ${msg.role === 'user' ? 'text-emerald-100' : 'text-slate-500'}`}>
         {msg.role === 'user' ? 'Transmit' : 'Synthesized'} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </div>
@@ -53,9 +74,9 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
             <i className="fa-solid fa-brain text-emerald-500 text-lg"></i>
           </div>
           <div>
-            <h2 className="font-semibold text-slate-100">Brain Terminal</h2>
+            <h2 className="font-semibold text-slate-100 text-sm">Brain Terminal</h2>
             <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+              <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
               <span className={`text-[10px] uppercase tracking-widest font-bold ${isProcessing ? 'text-amber-500' : 'text-emerald-500'}`}>
                 {isProcessing ? 'Processing' : 'Neural Active'}
               </span>
@@ -67,13 +88,13 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
         </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar scroll-smooth">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-2 custom-scrollbar scroll-smooth">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center opacity-50 space-y-4">
             <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
               <i className="fa-regular fa-comment-dots text-3xl text-slate-500"></i>
             </div>
-            <p className="text-slate-400 max-w-xs text-sm">Brain ready for document extraction.</p>
+            <p className="text-slate-400 max-w-xs text-sm font-medium">Neural interface ready.</p>
           </div>
         )}
         {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
@@ -87,8 +108,8 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isProcessing}
-            placeholder={isProcessing ? "Processing..." : "Ask your document anything..."}
-            className="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-2xl px-5 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-slate-600 shadow-inner"
+            placeholder={isProcessing ? "Processing..." : "Ask DOC-MIND..."}
+            className="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-2xl px-5 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-slate-600 shadow-inner text-sm"
           />
           <button
             type="submit"
