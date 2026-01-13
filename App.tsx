@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Chat } from './components/Chat';
@@ -9,14 +8,14 @@ import { analyzeDocument, analyzeYouTubeLink, analyzeGithubRepo, askQuestionStre
 const App: React.FC = () => {
   const [currentContent, setCurrentContent] = useState<ContentData | null>(null);
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
-  const [loadingMsg, setLoadingMsg] = useState('Mapping Context...');
+  const [loadingMsg, setLoadingMsg] = useState('Initializing Brain...');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [useSearch, setUseSearch] = useState(false);
+  const [useSearch, setUseSearch] = useState(true);
 
   const handleFileUpload = async (file: File, base64: string) => {
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Scanning Neural PDF...');
+    setLoadingMsg('Scanning Document...');
     setCurrentContent({ name: file.name, size: file.size.toString(), type: 'pdf', base64: base64 });
     try {
       const summary = await analyzeDocument(base64, file.type);
@@ -32,13 +31,13 @@ const App: React.FC = () => {
 
   const handleLinkUpload = async (url: string) => {
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Fetching Web Context...');
-    setCurrentContent({ name: 'YouTube Content', type: 'youtube', url: url });
+    setLoadingMsg('Neural Grounding: YouTube...');
+    setCurrentContent({ name: 'YouTube Context', type: 'youtube', url: url });
     try {
       const summary = await analyzeYouTubeLink(url);
       setCurrentContent(prev => prev ? { ...prev, summary } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Video context synchronized via Search Grounding.`, timestamp: Date.now() }]);
+      setMessages([{ id: 'init', role: 'assistant', content: `Video context synchronized via Deep Search.`, timestamp: Date.now() }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
       setCurrentContent(null);
@@ -48,13 +47,13 @@ const App: React.FC = () => {
 
   const handleRepoUpload = async (url: string) => {
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Mapping Code Architecture...');
-    setCurrentContent({ name: url.split('/').pop() || 'Repo', type: 'github', url: url });
+    setLoadingMsg('Neural Grounding: GitHub...');
+    setCurrentContent({ name: url.split('/').pop() || 'Repository', type: 'github', url: url });
     try {
       const summary = await analyzeGithubRepo(url);
       setCurrentContent(prev => prev ? { ...prev, summary } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Codebase mapped. I am ready to assist with project architecture and flow analysis.`, timestamp: Date.now() }]);
+      setMessages([{ id: 'init', role: 'assistant', content: `Codebase mapped. I am ready to analyze this architecture.`, timestamp: Date.now() }]);
     } catch (error: any) {
       setStatus(AnalysisStatus.ERROR);
       setCurrentContent(null);
@@ -97,7 +96,7 @@ const App: React.FC = () => {
     } catch (error: any) {
       setMessages(prev => {
         const newMsgs = [...prev];
-        newMsgs[newMsgs.length - 1].content = "Neural connection unstable. Search tool might be timing out or context is too large.";
+        newMsgs[newMsgs.length - 1].content = "The Neural connection timed out. Search grounding can be slow on large repositories or restricted videos.";
         return newMsgs;
       });
     } finally {
@@ -124,7 +123,7 @@ const App: React.FC = () => {
               }`}
             >
               <i className={`fa-solid ${useSearch ? 'fa-globe' : 'fa-magnifying-glass'}`}></i>
-              {useSearch ? 'Grounding Active' : 'Grounding Off'}
+              {useSearch ? 'Grounding On' : 'Grounding Off'}
             </button>
           </div>
         </div>
@@ -133,7 +132,7 @@ const App: React.FC = () => {
       <main className="flex-1 max-w-7xl mx-auto w-full p-6 flex flex-col">
         {!currentContent ? (
           <div className="flex-1 flex flex-col items-center justify-center py-12">
-            <h2 className="text-4xl md:text-6xl font-bold text-slate-100 mb-6 text-center leading-tight">Your Knowledge,<br/><span className="text-emerald-500">Neuralized.</span></h2>
+            <h2 className="text-4xl md:text-6xl font-bold text-slate-100 mb-6 text-center leading-tight">Neural Intelligence.<br/><span className="text-emerald-500 text-3xl md:text-5xl">Ultra Fast.</span></h2>
             <FileUpload 
               onUpload={handleFileUpload} 
               onLink={handleLinkUpload} 

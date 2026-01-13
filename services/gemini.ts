@@ -1,12 +1,22 @@
+import { GoogleGenAI, Modality } from "@google/genai";
 
-import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
+// Standardizing on Flash for maximum speed and reliable tool usage
+const MODEL_NAME = 'gemini-3-flash-preview';
+
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("Neural Terminal Key Missing. Ensure VITE_API_KEY is set in environment.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const generateSpeech = async (text: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Say naturally: ${text}` }] }],
+      contents: [{ parts: [{ text: `System Message: Read the following clearly and naturally: ${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
@@ -17,79 +27,75 @@ export const generateSpeech = async (text: string) => {
       },
     });
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("No audio data received");
+    if (!base64Audio) throw new Error("Audio buffer empty.");
     return base64Audio;
   } catch (error) {
+    console.error("Neural Voice Error:", error);
     throw error;
   }
 };
 
 export const analyzeGithubRepo = async (url: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Explicitly command the model to use the tool
-  const prompt = `I need you to use the googleSearch tool to fetch and analyze the content of this GitHub repository: ${url}. 
-  Do not guess. Use the search tool to find the README, file structure, and main purpose.
-  Provide a professional summary:
-  1. Primary Programming Languages
-  2. Core Tech Stack
-  3. High-level architecture (Monolith, Microservices, etc.)
-  4. Project Goal.`;
-  
+  const ai = getAI();
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
+      model: MODEL_NAME,
+      contents: `Perform a deep neural scan of this repository: ${url}`,
       config: {
-        tools: [{ googleSearch: {} }]
+        systemInstruction: "You are a senior software architect with real-time web access. You MUST use the googleSearch tool to browse the provided GitHub URL. Summarize the stack, architecture, and purpose based ONLY on the live repository data.",
+        tools: [{ googleSearch: {} }],
+        temperature: 0.1,
+        thinkingConfig: { thinkingBudget: 0 }
       }
     });
-    return response.text || "Neural mapping complete. You can now ask questions about this codebase.";
+    return response.text || "Neural mapping complete. Repository context indexed.";
   } catch (error: any) {
-    console.error("Repo Analysis Error:", error);
-    throw new Error("Repository analysis failed. Ensure it is a public repository.");
+    console.error("Repo Error:", error);
+    throw new Error("Repository link failed. Check if the repo is public and the URL is correct.");
   }
 };
 
 export const analyzeYouTubeLink = async (url: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Explicitly command the model to use the tool
-  const prompt = `I need you to use the googleSearch tool to retrieve details about this YouTube video: ${url}.
-  Do not guess. Fetch the title, channel name, and a summary of the topics discussed.
-  Provide:
-  - Video Title & Author
-  - 3-5 Main takeaways from the content.`;
-  
+  const ai = getAI();
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
+      model: MODEL_NAME,
+      contents: `Synchronize and analyze this video: ${url}`,
       config: {
-        tools: [{ googleSearch: {} }]
+        systemInstruction: "You are a video intelligence agent. You MUST use the googleSearch tool to fetch metadata and content details for the provided YouTube URL. Provide the video title, channel, and a 3-point core summary.",
+        tools: [{ googleSearch: {} }],
+        temperature: 0.1,
+        thinkingConfig: { thinkingBudget: 0 }
       }
     });
-    return response.text || "Video synchronized. Brain terminal is ready for queries.";
+    return response.text || "Video context synchronized.";
   } catch (error: any) {
-    console.error("YouTube Analysis Error:", error);
-    throw new Error("YouTube integration failed. Check the URL and try again.");
+    console.error("YouTube Error:", error);
+    throw new Error("YouTube integration failed. The neural search tool could not reach the content.");
   }
 };
 
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `Perform a high-speed neural scan of this document. Provide 3 core bullet points summarizing its content and purpose.`;
+  const ai = getAI();
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: MODEL_NAME,
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          { text: prompt }
+          { text: "Extract a concise 3-bullet point summary of this document." }
         ]
+      },
+      config: { 
+        systemInstruction: "You are an elite document analyst. Provide high-density summaries with zero fluff.",
+        temperature: 0.1,
+        thinkingConfig: { thinkingBudget: 0 }
       }
     });
-    return response.text || "";
+    return response.text || "Scan successful.";
   } catch (error: any) {
-    throw new Error("Document analysis failed.");
+    console.error("PDF Error:", error);
+    throw new Error("Document neural scan failed.");
   }
 };
 
@@ -99,14 +105,18 @@ export async function* askQuestionStream(
   history: { role: string; content: string }[],
   useSearch: boolean = false
 ) {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const historyContents = history.map(msg => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: msg.content }]
   }));
 
-  const config: any = { temperature: 0.1 };
-  // URLs ALWAYS require search grounding for context updates
+  const config: any = { 
+    systemInstruction: "You are DOC-MIND, a super-intelligent neural brain. Use the provided context (PDF or Search results) to answer precisely. If the user asks about something external and grounding is enabled, use the search tool.",
+    temperature: 0.2,
+    thinkingConfig: { thinkingBudget: 0 }
+  };
+  
   if (useSearch || content.type === 'youtube' || content.type === 'github') {
     config.tools = [{ googleSearch: {} }];
   }
@@ -116,17 +126,21 @@ export async function* askQuestionStream(
     parts.push({ inlineData: { data: content.base64, mimeType: content.mimeType } });
   }
   
-  const contextHeader = content.url ? `SOURCE URL: ${content.url}\n` : '';
-  parts.push({ text: `${contextHeader}Analyze the context and answer: ${question}` });
+  const contextPrefix = content.url ? `TARGET: ${content.url}\nCONTEXT_TYPE: ${content.type}\n` : '';
+  parts.push({ text: `${contextPrefix}INQUIRY: ${question}` });
 
-  const responseStream = await ai.models.generateContentStream({
-    model: 'gemini-3-pro-preview',
-    contents: [...historyContents, { role: 'user', parts }],
-    config
-  });
+  try {
+    const responseStream = await ai.models.generateContentStream({
+      model: MODEL_NAME,
+      contents: [...historyContents, { role: 'user', parts }],
+      config
+    });
 
-  for await (const chunk of responseStream) {
-    const text = chunk.text;
-    if (text) yield text;
+    for await (const chunk of responseStream) {
+      if (chunk.text) yield chunk.text;
+    }
+  } catch (err: any) {
+    console.error("Stream Error:", err);
+    yield "Neural connection unstable. This can happen if the grounding search takes too long or the link is restricted.";
   }
 }
