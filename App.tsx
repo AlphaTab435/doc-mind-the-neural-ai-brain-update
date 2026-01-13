@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Chat } from './components/Chat';
 import { DocumentStats } from './components/DocumentStats';
@@ -24,6 +24,10 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
   const [hasQuotaError, setHasQuotaError] = useState(false);
+  
+  // Ref-based history allows handleSendMessage to be stable (no dependency changes)
+  const conversationHistory = useRef<{role: string, content: string}[]>([]);
+  const analysisLock = useRef<string | null>(null);
 
   const handleSwitchKey = async () => {
     try {
@@ -39,51 +43,81 @@ const App: React.FC = () => {
     }
   };
 
+  const resetSession = () => {
+    analysisLock.current = null;
+    conversationHistory.current = [];
+    setCurrentContent(null);
+    setMessages([]);
+    setHasQuotaError(false);
+  };
+
   const handleFileUpload = async (file: File, base64: string) => {
+    if (analysisLock.current === base64) return;
+    analysisLock.current = base64;
+    
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Parsing Neural PDF...');
+    setLoadingMsg('Scanning Neural PDF...');
     setCurrentContent({ name: file.name, size: (file.size / 1024).toFixed(1) + ' KB', type: 'pdf', base64: base64 });
+    
     try {
       const summary = await analyzeDocument(base64, file.type);
       setCurrentContent(prev => prev ? { ...prev, summary } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Neural link established. PDF context parsed.`, timestamp: Date.now() }]);
+      const initMsg = "Neural link established. PDF context parsed successfully.";
+      setMessages([{ id: 'init', role: 'assistant', content: initMsg, timestamp: Date.now() }]);
+      conversationHistory.current = [{ role: 'model', content: initMsg }];
     } catch (error: any) {
+      analysisLock.current = null;
       setStatus(AnalysisStatus.ERROR);
       if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
     }
   };
 
   const handleLinkUpload = async (url: string) => {
+    if (analysisLock.current === url) return;
+    analysisLock.current = url;
+
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Syncing Video...');
+    setLoadingMsg('Syncing YouTube...');
     setCurrentContent({ name: 'YouTube Video', type: 'youtube', url: url });
+    
     try {
       const result = await analyzeYouTubeLink(url);
       setCurrentContent(prev => prev ? { ...prev, summary: result.text, sources: result.sources } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Video synchronized. Web grounding active.`, timestamp: Date.now(), sources: result.sources }]);
+      const initMsg = "Video context retrieved. High-speed grounding active.";
+      setMessages([{ id: 'init', role: 'assistant', content: initMsg, timestamp: Date.now(), sources: result.sources }]);
+      conversationHistory.current = [{ role: 'model', content: initMsg }];
     } catch (error: any) {
+      analysisLock.current = null;
       setStatus(AnalysisStatus.ERROR);
       if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
     }
   };
 
   const handleRepoUpload = async (url: string) => {
+    if (analysisLock.current === url) return;
+    analysisLock.current = url;
+
     setStatus(AnalysisStatus.ANALYZING);
-    setLoadingMsg('Mapping Repo...');
+    setLoadingMsg('Scanning Repo...');
     setCurrentContent({ name: url.split('/').pop() || 'Repository', type: 'github', url: url });
+    
     try {
       const result = await analyzeGithubRepo(url);
       setCurrentContent(prev => prev ? { ...prev, summary: result.text, sources: result.sources } : null);
       setStatus(AnalysisStatus.READY);
-      setMessages([{ id: 'init', role: 'assistant', content: `Repository indexed. Operational architecture mapped.`, timestamp: Date.now(), sources: result.sources }]);
+      const initMsg = "Repository indexed. Operational architecture mapped.";
+      setMessages([{ id: 'init', role: 'assistant', content: initMsg, timestamp: Date.now(), sources: result.sources }]);
+      conversationHistory.current = [{ role: 'model', content: initMsg }];
     } catch (error: any) {
+      analysisLock.current = null;
       setStatus(AnalysisStatus.ERROR);
       if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
     }
   };
 
+  // stable function with zero dependencies prevents rerender logic loops
   const handleSendMessage = useCallback(async (text: string) => {
     if (!currentContent || isProcessing) return;
 
@@ -102,7 +136,7 @@ const App: React.FC = () => {
           mimeType: currentContent.type === 'pdf' ? 'application/pdf' : undefined 
         }, 
         text, 
-        messages.map(m => ({ role: m.role, content: m.content })),
+        conversationHistory.current,
         useSearch
       );
 
@@ -124,15 +158,19 @@ const App: React.FC = () => {
           return newMsgs;
         });
       }
+
+      conversationHistory.current.push({ role: 'user', content: text });
+      conversationHistory.current.push({ role: 'model', content: fullContent });
+
     } catch (error: any) {
       if (error.message?.includes('429') || error.status === 429) setHasQuotaError(true);
     } finally {
       setIsProcessing(false);
     }
-  }, [currentContent, isProcessing, messages, useSearch]);
+  }, [currentContent, isProcessing, useSearch]);
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-slate-950 overflow-hidden selection:bg-emerald-500/30">
+    <div className="flex flex-col h-[100dvh] bg-slate-950 overflow-hidden selection:bg-emerald-500/30">
       <nav className="border-b border-white/5 bg-slate-900/40 backdrop-blur-xl shrink-0 h-16">
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.location.reload()}>
@@ -143,15 +181,6 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-3">
-            {hasQuotaError && (
-              <button 
-                onClick={handleSwitchKey}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/50 text-red-400 text-[10px] font-bold uppercase tracking-widest animate-pulse hover:bg-red-500 hover:text-white transition-all"
-              >
-                <i className="fa-solid fa-key"></i>
-                Key Saturated - Switch?
-              </button>
-            )}
             <button 
               onClick={() => setUseSearch(!useSearch)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-[10px] font-bold uppercase tracking-widest ${
@@ -165,11 +194,11 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col min-h-0 overflow-hidden">
+      <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col min-h-0 overflow-hidden relative">
         {!currentContent ? (
           <div className="h-full flex flex-col items-center justify-center animate-fade-up">
             <h2 className="text-4xl md:text-6xl font-black text-slate-100 mb-4 text-center leading-tight tracking-tighter">Instant <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">Intelligence.</span></h2>
-            <p className="text-slate-400 text-sm mb-12 text-center max-w-lg font-medium opacity-80 uppercase tracking-widest">Neural Document Terminal</p>
+            <p className="text-slate-400 text-sm mb-12 text-center max-w-lg font-medium opacity-80 uppercase tracking-widest">Neural AI Terminal</p>
             <FileUpload 
               onUpload={handleFileUpload} 
               onLink={handleLinkUpload} 
@@ -179,22 +208,22 @@ const App: React.FC = () => {
             />
           </div>
         ) : (
-          <div className="h-full grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
-            <div className="lg:col-span-4 h-full overflow-y-auto custom-scrollbar pr-1">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-hidden h-full">
+            <div className="lg:col-span-4 h-full overflow-y-auto custom-scrollbar pr-1 shrink-0">
               <DocumentStats content={currentContent} onSelectQuery={handleSendMessage} />
             </div>
-            <div className="lg:col-span-8 h-full min-h-0">
-              <Chat messages={messages} onSendMessage={handleSendMessage} onReset={() => setCurrentContent(null)} isProcessing={isProcessing} />
+            <div className="lg:col-span-8 h-full min-h-0 flex flex-col overflow-hidden bg-slate-900/20 rounded-3xl border border-white/5 shadow-2xl">
+              <Chat messages={messages} onSendMessage={handleSendMessage} onReset={resetSession} isProcessing={isProcessing} />
             </div>
           </div>
         )}
       </main>
       
       {hasQuotaError && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] bg-red-600/90 backdrop-blur-md text-white px-6 py-2 rounded-full shadow-2xl flex items-center gap-4 border border-white/20">
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Neural Rate Limit Hit (15 RPM)</span>
-          <button onClick={handleSwitchKey} className="bg-white text-red-600 px-3 py-1 rounded-full text-[9px] font-black uppercase">
-            Use My Key
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] bg-red-600/95 backdrop-blur-md text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-4 border border-white/20 animate-in slide-in-from-bottom-5">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Neural Congestion (429)</span>
+          <button onClick={handleSwitchKey} className="bg-white text-red-600 px-3 py-1 rounded-full text-[9px] font-black uppercase hover:bg-slate-100 transition-colors">
+            Switch Key
           </button>
         </div>
       )}

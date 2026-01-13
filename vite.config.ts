@@ -4,7 +4,6 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   // Load variables from the environment (Netlify or local .env)
-  // Use '.' instead of process.cwd() to resolve the typing error while maintaining standard Vite root detection.
   const env = loadEnv(mode, '.', '');
 
   return {
@@ -24,7 +23,9 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
-      minify: 'esbuild'
+      minify: 'esbuild',
+      // Ensure the generated chunks use the shimmed variables correctly
+      target: 'esnext'
     }
   };
 });
