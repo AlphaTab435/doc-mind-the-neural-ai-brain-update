@@ -65,41 +65,41 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-slate-900/40 border border-white/5 rounded-2xl md:rounded-3xl shadow-2xl">
+    <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden bg-slate-900/40 border border-white/5 rounded-2xl sm:rounded-3xl shadow-2xl">
       {/* Header */}
-      <div className="shrink-0 px-4 md:px-6 py-3 md:py-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/40 backdrop-blur-md z-10 shadow-sm">
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-            <i className="fa-solid fa-brain text-emerald-500 text-base md:text-lg"></i>
+      <div className="shrink-0 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/40 backdrop-blur-md z-10 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+            <i className="fa-solid fa-brain text-emerald-500 text-sm sm:text-lg"></i>
           </div>
           <div>
-            <h2 className="font-semibold text-slate-100 text-xs md:text-sm">Neural Link</h2>
+            <h2 className="font-semibold text-slate-100 text-xs sm:text-sm">Neural Link</h2>
             <div className="flex items-center gap-1">
-              <span className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
-              <span className={`text-[8px] md:text-[10px] uppercase tracking-widest font-bold ${isProcessing ? 'text-amber-500' : 'text-emerald-500'}`}>
+              <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+              <span className={`text-[8px] sm:text-[10px] uppercase tracking-widest font-bold ${isProcessing ? 'text-amber-500' : 'text-emerald-500'}`}>
                 {isProcessing ? 'Streaming' : 'Ready'}
               </span>
             </div>
           </div>
         </div>
         <button onClick={onReset} className="p-2 hover:bg-slate-700/50 rounded-lg transition-all text-slate-400 group active:scale-90">
-          <i className="fa-solid fa-rotate group-active:rotate-180 transition-transform text-xs md:text-base"></i>
+          <i className="fa-solid fa-rotate group-active:rotate-180 transition-transform text-xs sm:text-base"></i>
         </button>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 md:p-6 custom-scrollbar scroll-smooth overscroll-contain">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 sm:p-6 custom-scrollbar scroll-smooth overscroll-contain h-full min-h-0">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center opacity-30">
-            <i className="fa-solid fa-terminal text-3xl md:text-4xl text-slate-600 mb-4"></i>
-            <p className="text-slate-400 text-[8px] md:text-[10px] font-bold uppercase tracking-[0.3em]">Buffer Ready</p>
+            <i className="fa-solid fa-terminal text-3xl sm:text-4xl text-slate-600 mb-4"></i>
+            <p className="text-slate-400 text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.3em]">Buffer Ready</p>
           </div>
         )}
         {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
       </div>
 
       {/* Footer / Input */}
-      <div className="shrink-0 p-3 md:p-4 bg-slate-800/80 border-t border-slate-700/50 backdrop-blur-lg">
+      <div className="shrink-0 p-3 sm:p-4 bg-slate-800/80 border-t border-slate-700/50 backdrop-blur-lg">
         <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
           <input
             type="text"
@@ -108,16 +108,16 @@ export const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, onReset, is
             disabled={isProcessing}
             autoComplete="off"
             placeholder={isProcessing ? "Link busy..." : "Transmit..."}
-            className="w-full bg-slate-950/90 border border-slate-700/80 text-slate-100 rounded-xl md:rounded-2xl px-4 py-3 md:px-5 md:py-4 pr-12 md:pr-14 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all placeholder:text-slate-600 text-[13px] md:text-sm"
+            className="w-full bg-slate-950/90 border border-slate-700/80 text-slate-100 rounded-xl sm:rounded-2xl px-4 py-3 sm:px-5 sm:py-4 pr-12 sm:pr-14 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all placeholder:text-slate-600 text-[13px] sm:text-sm"
           />
           <button
             type="submit"
             disabled={!input.trim() || isProcessing}
-            className={`absolute right-1.5 top-1.5 bottom-1.5 w-10 md:w-12 flex items-center justify-center rounded-lg md:rounded-xl transition-all ${
+            className={`absolute right-1.5 top-1.5 bottom-1.5 w-10 sm:w-12 flex items-center justify-center rounded-lg sm:rounded-xl transition-all ${
               input.trim() && !isProcessing ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-xl' : 'bg-slate-800 text-slate-600'
             }`}
           >
-            <i className={`fa-solid ${isProcessing ? 'fa-circle-notch animate-spin' : 'fa-paper-plane'} text-xs md:text-base`}></i>
+            <i className={`fa-solid ${isProcessing ? 'fa-circle-notch animate-spin' : 'fa-paper-plane'} text-xs sm:text-base`}></i>
           </button>
         </form>
       </div>
