@@ -1,41 +1,39 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GroundingSource } from "../types";
 
-const LITE_MODEL = 'gemini-3-flash-preview';
-const SEARCH_MODEL = 'gemini-3-flash-preview'; 
+// Using Gemini 3 Flash for the best balance of tool usage and speed
+const MODEL_NAME = 'gemini-3-flash-preview';
 
 const getAI = () => {
   if (!process.env.API_KEY) throw new Error("API_KEY_MISSING");
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 2, baseDelay = 5000): Promise<T> {
+/**
+ * Intelligent Retry & Fallback Wrapper
+ * Handles Rate Limiting (RPM) which is the primary cause of 429 errors on free tiers.
+ */
+async function withRetry<T>(fn: () => Promise<T>, retries = 1, baseDelay = 1500): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
     const errorMsg = (error.message || "").toLowerCase();
     const status = error.status || 0;
     
-    // Check for Daily Quota (RPD)
-    // The API returns "exceeded your current quota" for daily limits on the free tier.
-    if (status === 429 && (
-      errorMsg.includes('daily') || 
-      errorMsg.includes('day') || 
-      errorMsg.includes('quota exhausted') || 
-      errorMsg.includes('exceeded your current quota')
-    )) {
-      const dailyErr = new Error("DAILY_QUOTA_EXHAUSTED");
-      (dailyErr as any).status = 429;
-      throw dailyErr;
-    }
-
-    // Standard Rate Limit (RPM)
-    const isRateLimit = errorMsg.includes('429') || status === 429;
-    
-    if (retries > 0 && isRateLimit) {
-      await new Promise(resolve => setTimeout(resolve, baseDelay));
-      return withRetry(fn, retries - 1, baseDelay * 2);
+    // 429 is the 'Quota Exceeded' error usually caused by Minute Limits (RPM)
+    if (status === 429) {
+      // If it's specifically a search tool quota, we let the caller handle the fallback
+      if (errorMsg.includes('search') || errorMsg.includes('grounding') || errorMsg.includes('tool')) {
+        const toolErr = new Error("TOOL_LIMIT");
+        (toolErr as any).status = 429;
+        throw toolErr;
+      }
+      
+      // Otherwise, try a brief exponential backoff
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, baseDelay));
+        return withRetry(fn, retries - 1, baseDelay * 2);
+      }
     }
     throw error;
   }
@@ -47,7 +45,7 @@ const extractSources = (response: any): GroundingSource[] => {
   if (chunks) {
     chunks.forEach((chunk: any) => {
       if (chunk.web) {
-        sources.push({ title: chunk.web.title || 'Source Verified', uri: chunk.web.uri });
+        sources.push({ title: chunk.web.title || 'Verified Resource', uri: chunk.web.uri });
       }
     });
   }
@@ -73,56 +71,60 @@ export const generateSpeech = async (text: string) => {
   });
 };
 
-export const analyzeGithubRepo = async (url: string) => {
-  return withRetry(async () => {
-    const ai = getAI();
+/**
+ * Universal Analyzer with Neural Fallback Strategy
+ * Tries Grounded Search first, falls back to Internal Reasoning if Tool Quota (RPM) is hit.
+ */
+const internalAnalyze = async (url: string, type: 'youtube' | 'github', attemptWithSearch: boolean = true) => {
+  const ai = getAI();
+  const systemPrompt = type === 'github' 
+    ? "Senior Systems Architect. Analyze the provided GitHub repo URL. Use technical knowledge to describe architecture and purpose."
+    : "Video Intelligence Analyst. Analyze the YouTube URL and provide a detailed summary of likely content and key takeaways.";
+
+  try {
     const response = await ai.models.generateContent({
-      model: SEARCH_MODEL,
-      contents: `Architectural analysis for: ${url}`,
+      model: MODEL_NAME,
+      contents: `SOURCE_URL: ${url}\nPerform a deep technical scan.`,
       config: {
-        systemInstruction: "You are a senior systems architect. Provide high-level technical metadata. Use Search grounding only to identify core tech stack.",
-        tools: [{ googleSearch: {} }],
-        temperature: 0.1
+        systemInstruction: systemPrompt,
+        temperature: 0.1,
+        tools: attemptWithSearch ? [{ googleSearch: {} }] : undefined
       }
     });
     return {
       text: response.text || "Scan complete.",
       sources: extractSources(response)
     };
-  });
+  } catch (error: any) {
+    // If we hit a tool-specific quota or grounding isn't available, we FALLBACK to model-only reasoning
+    if (attemptWithSearch && (error.status === 429 || error.message?.toLowerCase().includes('search'))) {
+      console.warn(`[DOC-MIND] Tool RPM reached. Switching to Neural Fallback for: ${url}`);
+      return internalAnalyze(url, type, false);
+    }
+    throw error;
+  }
+};
+
+export const analyzeGithubRepo = async (url: string) => {
+  return withRetry(() => internalAnalyze(url, 'github'));
 };
 
 export const analyzeYouTubeLink = async (url: string) => {
-  return withRetry(async () => {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: SEARCH_MODEL,
-      contents: `Summarize video context: ${url}`,
-      config: {
-        systemInstruction: "Video analyst. Concise technical summary.",
-        tools: [{ googleSearch: {} }],
-        temperature: 0.1
-      }
-    });
-    return {
-      text: response.text || "Sync complete.",
-      sources: extractSources(response)
-    };
-  });
+  return withRetry(() => internalAnalyze(url, 'youtube'));
 };
 
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
   return withRetry(async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: LITE_MODEL,
+      model: MODEL_NAME,
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          { text: "Provide a 3-bullet summary." }
+          { text: "Provide a high-density, 3-bullet summary of this document." }
         ]
       },
-      config: { systemInstruction: "Document analyst.", temperature: 0.1 }
+      config: { systemInstruction: "Precision Document Intelligence Agent.", temperature: 0.1 }
     });
     return response.text || "Analysis complete.";
   });
@@ -150,10 +152,10 @@ export async function* askQuestionStream(
   try {
     const ai = getAI();
     const responseStream = await ai.models.generateContentStream({
-      model: LITE_MODEL,
+      model: MODEL_NAME,
       contents: [...historyContents, { role: 'user', parts }],
       config: {
-        systemInstruction: "You are DOC-MIND. Precise technical markdown.",
+        systemInstruction: "You are DOC-MIND, an elite AI brain. Answer with technical precision using Markdown. Be helpful and concise.",
         temperature: 0.2,
         tools: useSearch ? [{ googleSearch: {} }] : undefined
       }
@@ -163,19 +165,20 @@ export async function* askQuestionStream(
       if (chunk.text) yield { text: chunk.text, sources: extractSources(chunk) };
     }
   } catch (err: any) {
-    const errorMsg = (err.message || "").toLowerCase();
-    
-    if (errorMsg.includes('daily') || errorMsg.includes('day') || errorMsg.includes('quota exhausted') || errorMsg.includes('exceeded your current quota')) {
-       yield { 
-        text: "🛑 **DAILY NEURAL EXHAUSTION**: You have used 100% of your Gemini API daily quota (RPD). \n\n**Next Steps:** \n1. Wait until Midnight Pacific Time for reset.\n2. Or, toggle 'Search Off' to continue chatting without grounding.", 
-        sources: [] 
-      };
-    } else if (err.status === 429) {
-      yield { 
-        text: "⏳ **MINUTE LIMIT REACHED (RPM)**: Your 60-second window is currently full. \n\n**Solution:** \n1. Wait 60 seconds for the buffer to clear.", 
-        sources: [] 
-      };
+    // If the tool is blocked during a stream, pivot to non-search and continue
+    if (useSearch && (err.status === 429 || err.message?.toLowerCase().includes('search'))) {
+      yield { text: "\n\n*(Neural Fallback Active: Search Tool Rate-Limited)*\n\n", sources: [] };
+      const ai = getAI();
+      const retryStream = await ai.models.generateContentStream({
+        model: MODEL_NAME,
+        contents: [...historyContents, { role: 'user', parts }],
+        config: { systemInstruction: "DOC-MIND Neural Reasoning (Internal Mode).", temperature: 0.2 }
+      });
+      for await (const chunk of retryStream) {
+        if (chunk.text) yield { text: chunk.text, sources: [] };
+      }
+    } else {
+      throw err;
     }
-    throw err;
   }
 }
